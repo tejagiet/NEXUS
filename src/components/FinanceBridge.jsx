@@ -11,7 +11,7 @@ export default function FinanceBridge({ profile }) {
       .then(({ data }) => { setFee(data); setLoading(false) })
   }, [])
 
-  const campxUrl = `https://giet.campx.in/?pin=${profile?.pin_number || ''}`
+  const campxUrl = `https://giet.campx.in/gier/payment-portal/login`
   const pct = fee ? Math.round((fee.paid_fee / fee.total_fee) * 100) : 0
   const outstanding = fee ? fee.total_fee - fee.paid_fee : 0
 
