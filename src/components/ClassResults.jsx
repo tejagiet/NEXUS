@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
-import { GraduationCap, RefreshCw, Medal, Loader2, AlertCircle, ChevronUp, ChevronDown, Download, Trophy, Users, TrendingUp, Hash, Layers } from 'lucide-react'
+import { GraduationCap, RefreshCw, Medal, Loader2, AlertCircle, ChevronUp, ChevronDown, Download, Trophy, Users, TrendingUp, Hash, Layers, CloudUpload, FolderOpen } from 'lucide-react'
 
 const SEMESTERS = [
   { value: '1', label: '1st Sem' },
@@ -36,7 +36,9 @@ export default function ClassResults({ profile }) {
   
   const [sortKey,   setSortKey]   = useState('rank')
   const [sortAsc,   setSortAsc]   = useState(true)
-  const [expanded,  setExpanded]  = useState(null)
+  const [expanded,   setExpanded]   = useState(null)
+  const [uploading,  setUploading]  = useState(false)
+  const [uploadLog,  setUploadLog]  = useState([])
   const abortRef = useRef(false)
 
   async function fetchAll() {
@@ -79,6 +81,17 @@ export default function ClassResults({ profile }) {
         })
         
         if (!error && data?.subjects && data.subjects.length > 0) {
+          // AUTO-REGISTRATION: Upsert to students table
+          try {
+            await supabase.from('students').upsert({
+              pin_number: st.pin,
+              full_name: data.studentName,
+              branch: data.subjects[0]?.code?.includes('-') ? data.subjects[0].code.split('-')[0] : 'AI'
+            }, { onConflict: 'pin_number' })
+          } catch (upsertErr) {
+            console.error("[Reg] Failed to auto-persist student:", upsertErr)
+          }
+
           collected.push({
             pin: st.pin,
             name: data.studentName || st.name,
@@ -116,11 +129,19 @@ export default function ClassResults({ profile }) {
     else { setSortKey(key); setSortAsc(true) }
   }
 
-  const sorted = [...results].sort((a, b) => {
-    const av = a[sortKey], bv = b[sortKey]
-    if (typeof av === 'number') return sortAsc ? av - bv : bv - av
-    return sortAsc ? String(av).localeCompare(String(bv)) : String(bv).localeCompare(String(av))
-  })
+  const failedStudents = results.filter(r => r.result !== 'PASS' || r.gpa <= 0)
+  const passedStudents = results.filter(r => r.result === 'PASS' && r.gpa > 0)
+
+  function getSortedList(list) {
+    return [...list].sort((a, b) => {
+      const av = a[sortKey], bv = b[sortKey]
+      if (typeof av === 'number') return sortAsc ? av - bv : bv - av
+      return sortAsc ? String(av).localeCompare(String(bv)) : String(bv).localeCompare(String(av))
+    })
+  }
+
+  const sortedFailed = getSortedList(failedStudents)
+  const sortedPassed = getSortedList(passedStudents)
 
   const SortIcon = ({ k }) => sortKey === k
     ? (sortAsc ? <ChevronUp size={12} /> : <ChevronDown size={12} />)
@@ -130,15 +151,132 @@ export default function ClassResults({ profile }) {
   const avgGpa    = results.length ? (results.reduce((s, r) => s + r.gpa, 0) / results.length).toFixed(2) : '—'
   const topGpa    = results.length ? Math.max(...results.map(r => r.gpa)) : '—'
 
+  function makeCSVBlob(rows) {
+    const csv = rows.map(r => r.map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(',')).join('\n')
+    return new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+  }
+
   function downloadCSV() {
-    const header = ['Rank','PIN','Name','GPA','Grand Total','Result']
-    const rows   = sorted.map(r => [r.rank, r.pin, r.name, r.gpa, r.grandTotal, r.result])
-    const csv    = [header, ...rows].map(r => r.join(',')).join('\n')
+    const sortedAll = [...getSortedList(failedStudents), ...getSortedList(passedStudents)]
+    const header = ['Rank', 'PIN', 'Name', 'GPA', 'Grand Total', 'Result']
+    const rows   = sortedAll.map(r => [r.rank, r.pin, r.name, r.gpa ?? '—', r.grandTotal, r.result])
+    const blob   = makeCSVBlob([header, ...rows])
     const a      = document.createElement('a')
-    a.href       = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv)
+    a.href       = URL.createObjectURL(blob)
     a.download   = `SBTET_Results_Batch_Sem${semester}.csv`
     a.click()
   }
+
+  async function uploadToStorage() {
+    if (!results.length) return
+    setUploading(true)
+    setUploadLog([])
+    const log = []
+    const folder = `sem${semester}`
+
+    // ── 1. Master file: all students, all subject columns ──────────────
+    const allSubjectCodes = [...new Set(results.flatMap(r => r.subjects.map(s => s.code)))]
+    const masterHeader = ['Rank', 'PIN', 'Name', 'Result', 'GPA', 'Grand Total', ...allSubjectCodes.flatMap(c => [`${c}_Ext`, `${c}_Int`, `${c}_Total`, `${c}_Grade`])]
+    const masterRows = results.map(r => {
+      const subMap = Object.fromEntries(r.subjects.map(s => [s.code, s]))
+      return [
+        r.rank, r.pin, r.name, r.result, r.gpa ?? '—', r.grandTotal,
+        ...allSubjectCodes.flatMap(c => {
+          const s = subMap[c]
+          return s ? [s.external, s.internal, s.total, s.grade] : ['', '', '', '']
+        })
+      ]
+    })
+    const masterBlob = makeCSVBlob([masterHeader, ...masterRows])
+    const masterPath = `${folder}/CLASS_RESULTS_Sem${semester}_Master.csv`
+    const { error: masterErr } = await supabase.storage.from('results').upload(masterPath, masterBlob, { upsert: true, contentType: 'text/csv' })
+    log.push(masterErr ? `❌ Master: ${masterErr.message}` : `✅ Master file saved`)
+
+    // ── 2. Per-subject files ───────────────────────────────────────────
+    for (const code of allSubjectCodes) {
+      const subHeader = ['PIN', 'Name', 'External', 'Internal', 'Total', 'Grade', 'Result']
+      const subRows = results
+        .filter(r => r.subjects.some(s => s.code === code))
+        .map(r => {
+          const s = r.subjects.find(sub => sub.code === code)
+          return [r.pin, r.name, s.external, s.internal, s.total, s.grade, s.result]
+        })
+      const subBlob = makeCSVBlob([subHeader, ...subRows])
+      const subPath = `${folder}/Subject_${code}_Sem${semester}.csv`
+      const { error: subErr } = await supabase.storage.from('results').upload(subPath, subBlob, { upsert: true, contentType: 'text/csv' })
+      log.push(subErr ? `❌ ${code}: ${subErr.message}` : `✅ Subject ${code} saved`)
+    }
+
+    setUploadLog(log)
+    setUploading(false)
+  }
+
+  const TableHeader = () => (
+    <thead className="bg-[#272A6F]/5 border-b border-gray-100">
+      <tr className="text-[#272A6F] text-[10px] font-black uppercase tracking-widest">
+        <th className="px-6 py-4 text-center cursor-pointer hover:bg-white/50 transition-colors" onClick={() => sort('rank')}>
+          <span className="flex items-center justify-center space-x-1">Rank <SortIcon k="rank" /></span>
+        </th>
+        <th className="px-6 py-4 text-left cursor-pointer hover:bg-white/50 transition-colors" onClick={() => sort('name')}>
+          <span className="flex items-center space-x-1">Cadet Name <SortIcon k="name" /></span>
+        </th>
+        <th className="px-6 py-4 text-center cursor-pointer hover:bg-white/50 transition-colors" onClick={() => sort('pin')}>
+          <span className="flex items-center justify-center space-x-1 font-mono">PIN <SortIcon k="pin" /></span>
+        </th>
+        <th className="px-6 py-4 text-center cursor-pointer hover:bg-white/50 transition-colors" onClick={() => sort('gpa')}>
+          <span className="flex items-center justify-center space-x-1">GPA <SortIcon k="gpa" /></span>
+        </th>
+        <th className="px-6 py-4 text-center">Result</th>
+        <th className="px-6 py-4 text-center">Actions</th>
+      </tr>
+    </thead>
+  )
+
+  const Row = (r) => (
+    <React.Fragment key={r.pin}>
+      <tr className={`hover:bg-white/80 transition-all ${r.rank <= 3 && r.result === 'PASS' ? 'bg-[#EFBE33]/5' : ''} group`}>
+        <td className="px-6 py-4 text-center font-black">
+          {r.rank === 1 ? '🥇' : r.rank === 2 ? '🥈' : r.rank === 3 ? '🥉' : r.rank}
+        </td>
+        <td className="px-6 py-4 font-bold text-[#272A6F]">{r.name}</td>
+        <td className="px-6 py-4 text-center font-mono text-xs text-gray-400 font-bold">{r.pin}</td>
+        <td className="px-6 py-4 text-center">
+          <span className={`text-lg font-black ${r.gpa >= 8 ? 'text-green-600' : r.gpa >= 6 ? 'text-blue-600' : 'text-red-500'}`}>
+            {r.gpa || '—'}
+          </span>
+        </td>
+        <td className="px-6 py-4 text-center">
+          <span className={`px-2.5 py-1 rounded-lg text-[10px] font-black ${(r.result === 'PASS' && r.gpa > 0) ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'}`}>
+            {(r.result === 'PASS' && r.gpa > 0) ? 'PASS' : 'FAIL'}
+          </span>
+        </td>
+        <td className="px-6 py-4 text-center">
+          <button onClick={() => setExpanded(e => e === r.pin ? null : r.pin)}
+            className="w-8 h-8 rounded-lg bg-gray-50 text-gray-400 hover:bg-[#272A6F] hover:text-white transition-all flex items-center justify-center mx-auto shadow-sm">
+            {expanded === r.pin ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+          </button>
+        </td>
+      </tr>
+      {expanded === r.pin && (
+          <tr className="bg-white/90">
+            <td colSpan={6} className="px-8 py-6 animate-in slide-in-from-top-2 duration-300">
+              <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-3">
+                {r.subjects.map((s, i) => (
+                  <div key={i} className="bg-gray-50 rounded-xl p-3 border border-gray-100 shadow-sm flex flex-col items-center">
+                    <span className="text-[10px] font-black text-gray-400 mb-1">{s.code}</span>
+                    <span className="text-xl font-black text-[#272A6F] mb-0.5">{s.total}</span>
+                    <span className="text-[9px] font-bold text-gray-400 mb-1.5 uppercase tracking-tighter">
+                      Ext: {s.external} | Int: {s.internal}
+                    </span>
+                    <span className={`px-2 py-0.5 rounded-md text-[10px] font-black ${GRADE_COLORS[s.grade] || 'bg-gray-100'}`}>{s.grade}</span>
+                  </div>
+                ))}
+              </div>
+            </td>
+          </tr>
+        )}
+    </React.Fragment>
+  )
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
@@ -151,11 +289,18 @@ export default function ClassResults({ profile }) {
         </div>
         <div className="flex items-center gap-3">
           {results.length > 0 && (
-            <button onClick={downloadCSV}
-              className="flex items-center space-x-2 bg-white border-2 border-gray-100 text-gray-600 px-4 py-2.5 rounded-xl font-bold text-sm hover:border-[#272A6F] hover:text-[#272A6F] transition-all">
-              <Download size={16} />
-              <span>Export CSV</span>
-            </button>
+            <>
+              <button onClick={downloadCSV}
+                className="flex items-center space-x-2 bg-white border-2 border-gray-100 text-gray-600 px-4 py-2.5 rounded-xl font-bold text-sm hover:border-[#272A6F] hover:text-[#272A6F] transition-all">
+                <Download size={16} />
+                <span>Export CSV</span>
+              </button>
+              <button onClick={uploadToStorage} disabled={uploading}
+                className="flex items-center space-x-2 bg-emerald-600 text-white px-4 py-2.5 rounded-xl font-bold text-sm hover:bg-emerald-700 transition-all shadow-md disabled:opacity-50 active:scale-95">
+                {uploading ? <Loader2 size={16} className="animate-spin" /> : <CloudUpload size={16} />}
+                <span>{uploading ? 'Uploading…' : 'Save to Storage'}</span>
+              </button>
+            </>
           )}
           <select value={semester} onChange={e => setSemester(e.target.value)}
             className="border-2 border-gray-100 rounded-xl px-4 py-2.5 text-sm font-bold focus:outline-none focus:border-[#272A6F] bg-white transition-all">
@@ -218,7 +363,7 @@ export default function ClassResults({ profile }) {
                 <Users size={48} className="mx-auto text-[#272A6F]/20 mb-4" />
                 <p className="text-[#272A6F]/60 font-bold uppercase tracking-widest text-xs">Pulls from database profiles</p>
                 <p className="text-gray-400 text-sm mt-1">This will only fetch results for students already registered in Nexus.</p>
-             </div>
+              </div>
            )}
         </div>
       )}
@@ -250,7 +395,6 @@ export default function ClassResults({ profile }) {
         </div>
       )}
 
-      {/* Stats Summary */}
       {results.length > 0 && !fetching && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <StatBox icon={Users} label="Cadets Pulled" value={results.length} color="blue" />
@@ -260,73 +404,86 @@ export default function ClassResults({ profile }) {
         </div>
       )}
 
-      {/* Table */}
+      {/* Upload Log */}
+      {uploadLog.length > 0 && (
+        <div className="glass rounded-[24px] p-6 shadow-lg border-white/50 animate-in fade-in duration-300">
+          <div className="flex items-center space-x-3 mb-4">
+            <div className="w-9 h-9 bg-emerald-500 rounded-xl flex items-center justify-center text-white shadow-md">
+              <FolderOpen size={18} />
+            </div>
+            <div>
+              <p className="font-black text-[#272A6F]">Storage Upload Report</p>
+              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Supabase Storage → results bucket</p>
+            </div>
+          </div>
+          <div className="space-y-1.5 max-h-52 overflow-y-auto pr-1">
+            {uploadLog.map((line, i) => (
+              <div key={i} className={`text-xs font-mono px-3 py-1.5 rounded-lg ${line.startsWith('✅') ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-600'}`}>
+                {line}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Tables Section */}
       {results.length > 0 && (
-        <div className="glass rounded-[32px] overflow-hidden shadow-2xl border-white/50 animate-in slide-in-from-bottom-5 duration-700">
-           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-[#272A6F]/5 border-b border-gray-100">
-                <tr className="text-[#272A6F] text-[10px] font-black uppercase tracking-widest">
-                  <th className="px-6 py-4 text-center cursor-pointer hover:bg-white/50 transition-colors" onClick={() => sort('rank')}>
-                    <span className="flex items-center justify-center space-x-1">Rank <SortIcon k="rank" /></span>
-                  </th>
-                  <th className="px-6 py-4 text-left cursor-pointer hover:bg-white/50 transition-colors" onClick={() => sort('name')}>
-                    <span className="flex items-center space-x-1">Cadet Name <SortIcon k="name" /></span>
-                  </th>
-                  <th className="px-6 py-4 text-center font-mono">PIN</th>
-                  <th className="px-6 py-4 text-center cursor-pointer hover:bg-white/50 transition-colors" onClick={() => sort('gpa')}>
-                    <span className="flex items-center justify-center space-x-1">GPA <SortIcon k="gpa" /></span>
-                  </th>
-                  <th className="px-6 py-4 text-center">Result</th>
-                  <th className="px-6 py-4 text-center">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {sorted.map((r) => (
-                  <React.Fragment key={r.pin}>
-                    <tr className={`hover:bg-white/80 transition-all ${r.rank <= 3 ? 'bg-[#EFBE33]/5' : ''} group`}>
-                      <td className="px-6 py-4 text-center font-black">
-                        {r.rank === 1 ? '🥇' : r.rank === 2 ? '🥈' : r.rank === 3 ? '🥉' : r.rank}
-                      </td>
-                      <td className="px-6 py-4 font-bold text-[#272A6F]">{r.name}</td>
-                      <td className="px-6 py-4 text-center font-mono text-xs text-gray-400 font-bold">{r.pin}</td>
-                      <td className="px-6 py-4 text-center">
-                        <span className={`text-lg font-black ${r.gpa >= 8 ? 'text-green-600' : r.gpa >= 6 ? 'text-blue-600' : 'text-red-500'}`}>
-                          {r.gpa}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 text-center">
-                        <span className={`px-2.5 py-1 rounded-lg text-[10px] font-black ${r.result === 'PASS' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'}`}>
-                          {r.result}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 text-center">
-                        <button onClick={() => setExpanded(e => e === r.pin ? null : r.pin)}
-                          className="w-8 h-8 rounded-lg bg-gray-50 text-gray-400 hover:bg-[#272A6F] hover:text-white transition-all flex items-center justify-center mx-auto shadow-sm">
-                          {expanded === r.pin ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-                        </button>
-                      </td>
-                    </tr>
-                    {expanded === r.pin && (
-                        <tr className="bg-white/90">
-                          <td colSpan={6} className="px-8 py-6 animate-in slide-in-from-top-2 duration-300">
-                            <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-3">
-                              {r.subjects.map((s, i) => (
-                                <div key={i} className="bg-gray-50 rounded-xl p-3 border border-gray-100 shadow-sm flex flex-col items-center">
-                                  <span className="text-[10px] font-black text-gray-400 mb-1">{s.code}</span>
-                                  <span className="text-xl font-black text-[#272A6F] mb-1">{s.total}</span>
-                                  <span className={`px-2 py-0.5 rounded-md text-[10px] font-black ${GRADE_COLORS[s.grade] || 'bg-gray-100'}`}>{s.grade}</span>
-                                </div>
-                              ))}
-                            </div>
-                          </td>
-                        </tr>
-                      )}
-                  </React.Fragment>
-                ))}
-              </tbody>
-            </table>
-           </div>
+        <div className="space-y-12">
+          {/* Failed Section */}
+          {sortedFailed.length > 0 && (
+            <div className="glass rounded-[32px] overflow-hidden shadow-2xl border-white/50 border-t-red-500 border-t-8">
+              <div className="px-8 py-6 bg-red-50/50 flex items-center justify-between border-b border-red-100">
+                <div className="flex items-center space-x-3">
+                  <div className="w-10 h-10 bg-red-500 rounded-xl flex items-center justify-center text-white shadow-lg">
+                    <AlertCircle size={20} />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-black text-red-700">Candidates with Backlogs</h3>
+                    <p className="text-xs text-red-600 font-bold uppercase tracking-widest mt-0.5">Focus Group for Remedial Sessions</p>
+                  </div>
+                </div>
+                <span className="bg-red-500 text-white px-4 py-1.5 rounded-full text-xs font-black shadow-lg">
+                  {sortedFailed.length} STUDENTS
+                </span>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <TableHeader />
+                  <tbody className="divide-y divide-gray-100">
+                    {sortedFailed.map(Row)}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* Passed Section */}
+          {sortedPassed.length > 0 && (
+            <div className="glass rounded-[32px] overflow-hidden shadow-2xl border-white/50 border-t-emerald-500 border-t-8">
+              <div className="px-8 py-6 bg-emerald-50/50 flex items-center justify-between border-b border-emerald-100">
+                <div className="flex items-center space-x-3">
+                  <div className="w-10 h-10 bg-emerald-500 rounded-xl flex items-center justify-center text-white shadow-lg">
+                    <Trophy size={20} />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-black text-emerald-700">Passed Successfully</h3>
+                    <p className="text-xs text-emerald-600 font-bold uppercase tracking-widest mt-0.5">Cleared Semester Exams</p>
+                  </div>
+                </div>
+                <span className="bg-emerald-500 text-white px-4 py-1.5 rounded-full text-xs font-black shadow-lg">
+                  {sortedPassed.length} STUDENTS
+                </span>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <TableHeader />
+                  <tbody className="divide-y divide-gray-100">
+                    {sortedPassed.map(Row)}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

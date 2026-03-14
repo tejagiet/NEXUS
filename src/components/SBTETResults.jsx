@@ -205,7 +205,7 @@ export default function SBTETResults({ profile }) {
               <div className="relative z-10">
                 <p className="text-white/40 text-[10px] font-black uppercase tracking-[0.2em] mb-1">Semester GPA</p>
                 <div className="flex items-baseline space-x-2">
-                  <h3 className="text-7xl font-black text-[#EFBE33]">{result.gpa ?? result.sgpa}</h3>
+                  <h3 className="text-7xl font-black text-[#EFBE33]">{result.gpa ?? result.sgpa ?? '—'}</h3>
                   <span className="text-white/30 font-bold">/ 10</span>
                 </div>
               </div>
@@ -224,10 +224,10 @@ export default function SBTETResults({ profile }) {
               <div className="glass rounded-3xl p-6 flex flex-col justify-between border-white/50">
                 <p className="text-gray-400 text-[10px] font-black uppercase tracking-widest">Final Result</p>
                 <div className="flex items-center space-x-2">
-                  <p className={`text-2xl font-black ${result.result === 'PASS' ? 'text-green-600' : 'text-red-500'}`}>
-                    {result.result}
+                  <p className={`text-2xl font-black ${(result.result === 'PASS' && (result.gpa > 0 || result.sgpa > 0)) ? 'text-green-600' : 'text-red-500'}`}>
+                    {(result.result === 'PASS' && (result.gpa > 0 || result.sgpa > 0)) ? 'PASS' : 'FAIL'}
                   </p>
-                  <div className={`w-2 h-2 rounded-full ${result.result === 'PASS' ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`} />
+                  <div className={`w-2 h-2 rounded-full ${(result.result === 'PASS' && (result.gpa > 0 || result.sgpa > 0)) ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`} />
                 </div>
               </div>
               <div className="glass rounded-3xl p-6 flex flex-col justify-between border-white/50 hidden sm:flex">
@@ -303,8 +303,8 @@ export default function SBTETResults({ profile }) {
                         </span>
                       </td>
                       <td className="px-8 py-4 text-center">
-                        <span className={`text-[10px] font-black px-2 py-1 rounded-md ${sub.result === 'P' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-500'}`}>
-                          {sub.result === 'P' ? 'PASS' : 'FAIL'}
+                        <span className={`text-[10px] font-black px-2 py-1 rounded-md ${sub.result === 'PASS' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-500'}`}>
+                          {sub.result === 'PASS' ? 'PASS' : 'FAIL'}
                         </span>
                       </td>
                     </tr>
@@ -319,7 +319,7 @@ export default function SBTETResults({ profile }) {
                     </td>
                     <td colSpan={2} className="px-8 py-6 text-center bg-[#EFBE33] text-[#272A6F]">
                        <p className="text-[10px] font-black uppercase tracking-widest opacity-60">Final GPA</p>
-                       <p className="text-3xl font-black">{result.gpa ?? result.sgpa}</p>
+                       <p className="text-3xl font-black">{result.gpa ?? result.sgpa ?? '—'}</p>
                     </td>
                   </tr>
                 </tbody>

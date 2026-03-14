@@ -69,6 +69,8 @@ Deno.serve(async (req: Request) => {
 function parseResultHTML(originalHtml: string, cleanHtml: string, pin: string, semester: string) {
   let subjects: any[] = []
   let studName = '', examMonth = '', resultStr = 'PASS'
+  let officialGpa: number | null = null
+  let officialTotal: number | null = null
 
   // 1. Try to extract from subjectList JS variable (Best for Marks)
   const scriptMatch = originalHtml.match(/var\s+subjectList\s*=\s*(\[[\s\S]*?\])\s*;/i)
@@ -95,30 +97,39 @@ function parseResultHTML(originalHtml: string, cleanHtml: string, pin: string, s
     }
   }
 
-  // 2. Parse HTML Table (Best for Name and Fallback)
+  // 2. Parse HTML Table (Metadata & Fallback)
+  const useFallback = subjects.length === 0
   const rows = cleanHtml.match(/<tr[^>]*>([\s\S]*?)<\/tr>/gi) || []
+  
   for (const row of rows) {
-    // CRITICAL: Look for BOTH th and td to get the code (th) and marks (td)
     const cells = row.match(/<t[dh][^>]*>([\s\S]*?)<\/t[dh]>/gi) || []
     const txt = cells.map(c => c.replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').trim())
-
     const key = txt.length >= 1 ? txt[0].toUpperCase() : ''
 
     // A. Detect Name/Metadata (Key-Value Row)
     if (txt.length >= 2) {
         if (key === 'NAME') studName = txt[1]
         if (key.includes('MONTH') || key.includes('SESSION')) examMonth = txt[1]
+        
+        if (key === 'GPA' || key === 'SGPA' || key === 'CGPA') {
+            officialGpa = parseFloat(txt[1]) || null
+        }
+        if (key.includes('TOTAL') && !key.includes('SUBJECT')) {
+            officialTotal = parseInt(txt[1].replace(/[^0-9]/g, '')) || null
+        }
+
         if (key.includes('RESULT') && txt[1]) {
             const resTxt = txt[1].toUpperCase()
-            if (resTxt.includes('PASS') || resTxt.includes('PROMOTED') || resTxt.includes('COMPLETED')) {
+            if (resTxt === 'P' || resTxt === 'N' || resTxt.includes('PASS') || resTxt.includes('PROMOTED') || resTxt.includes('COMPLETED')) {
                 resultStr = 'PASS'
+            } else {
+                resultStr = 'FAIL'
             }
         }
     }
 
-    // B. Detect Subject Row (Fallback)
-    // Table indices: 0:Code(th), 1:Ext(td), 2:Int(td), 3:Total, 4:GP, 5:Credits, 6:Grade, 7:Result
-    if (txt.length >= 8 && /^[A-Z0-9-]{2,10}$/.test(txt[0]) && !key.includes('PIN') && !key.includes('NAME')) {
+    // B. Detect Subject Row (Fallback if script list failed)
+    if (useFallback && txt.length >= 8 && /^[A-Z0-9-]{2,10}$/.test(txt[0]) && !key.includes('PIN') && !key.includes('NAME')) {
       const isPassGrade = txt[6] && txt[6] !== 'F' && txt[6] !== 'AB'
       const isPassStatus = ['P', 'N', 'C', 'COMPLETED', 'PASS'].includes(String(txt[7]).toUpperCase())
 
@@ -136,33 +147,35 @@ function parseResultHTML(originalHtml: string, cleanHtml: string, pin: string, s
   }
 
   // 3. Status determination (If resultStr hasn't been set by metadata)
-  if (subjects.length > 0 && resultStr !== 'PASS') {
-      resultStr = subjects.some(s => s.result === 'FAIL' || s.grade === 'F') ? 'FAIL' : 'PASS'
-  }
+  const hasFail = subjects.some(s => s.result === 'FAIL' || s.grade === 'F')
+  if (hasFail) resultStr = 'FAIL'
 
-  // 4. Last Resort Name Fallback
-  if (!studName) {
-    const nameMatch = cleanHtml.match(/(?:Name|STUDENT NAME)\s*[:\-]\s*([^<|\n\t]+)/i)
-    studName = nameMatch ? nameMatch[1].trim() : 'Unknown Student'
-  }
-
-  const grandTotal = subjects.reduce((s, b) => s + b.total, 0)
-  const gpa = calcFallBackGPA(subjects)
+  // 4. Final Aggregates
+  const calculatedTotal = subjects.reduce((s, b) => s + b.total, 0)
+  const calculatedGpa = calcFallBackGPA(subjects)
 
   const SEM_LABELS = ['1st', '2nd', '3rd', '4th', '5th', '6th']
   const semLabel = SEM_LABELS[parseInt(semester) - 1] || `${parseInt(semester)}th`
 
+  // 5. Normalization & Masking
+  let finalGpa: number | null = officialGpa ?? calculatedGpa
+  if (resultStr === 'FAIL' || (finalGpa === 0)) {
+      resultStr = 'FAIL'
+      finalGpa = null // "no gpa for failed students"
+  }
+
   return {
-    studentName: studName,
+    studentName: studName || 'Unknown Student',
     pin: pin.toUpperCase(),
     semester: `${semLabel} Semester`,
-    gpa,
-    grandTotal,
+    gpa: finalGpa,
+    grandTotal: officialTotal ?? calculatedTotal,
     result: resultStr,
     examMonth: examMonth || 'Unknown Session',
     subjects
   }
 }
+
 
 
 function calcFallBackGPA(subs: any[]) {

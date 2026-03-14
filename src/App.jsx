@@ -9,15 +9,18 @@ import SBTETResults from './components/SBTETResults'
 import ClassResults from './components/ClassResults'
 import LMSPortal from './components/LMSPortal'
 import MFASetup from './components/MFASetup'
+import MFAVerify from './components/MFAVerify'
 import ManagementSuite from './components/ManagementSuite'
+import SmartTimetable from './components/SmartTimetable'
 import {
   LayoutDashboard, LogOut, User, ClipboardList, Wallet, Camera,
-  GraduationCap, BookOpen, ShieldCheck, Settings, Menu, X, MessageSquare
+  GraduationCap, BookOpen, ShieldCheck, Settings, Menu, X, MessageSquare, Calendar
 } from 'lucide-react'
 
 const MENU = {
   student: [
     { id: 'dashboard', label: 'My Dashboard',  icon: LayoutDashboard },
+    { id: 'timetable', label: 'Timetable',     icon: Calendar },
     { id: 'sbtet',     label: 'SBTET Results', icon: GraduationCap },
     { id: 'fees',      label: 'Finance',        icon: Wallet },
     { id: 'lms',       label: 'Resources',      icon: BookOpen },
@@ -25,6 +28,7 @@ const MENU = {
   ],
   faculty: [
     { id: 'register',  label: 'Digital Register', icon: ClipboardList },
+    { id: 'timetable', label: 'Class Timetable', icon: Calendar },
     { id: 'classresults', label: 'Class Results', icon: GraduationCap },
     { id: 'lms',       label: 'Upload Resources', icon: BookOpen },
     { id: 'mgmt',      label: 'Management',       icon: Settings },
@@ -32,11 +36,13 @@ const MENU = {
   ],
   admin: [
     { id: 'dashboard',    label: 'Overview',       icon: LayoutDashboard },
+    { id: 'timetable',    label: 'Global Schedule',icon: Calendar },
     { id: 'register',     label: 'Attendance',     icon: ClipboardList },
     { id: 'classresults', label: 'Class Results',  icon: GraduationCap },
     { id: 'cctv',         label: 'CCTV Monitor',   icon: Camera },
     { id: 'mgmt',         label: 'Management',     icon: Settings },
     { id: 'lms',          label: 'Resources',      icon: BookOpen },
+    { id: 'mfa',          label: 'Security (2FA)',   icon: ShieldCheck },
   ],
 }
 
@@ -51,6 +57,7 @@ function RoleView({ tab, profile }) {
     case 'cctv':         return <CCTVMonitor profile={profile} />
     case 'mfa':          return <MFASetup profile={profile} />
     case 'mgmt':         return <ManagementSuite profile={profile} />
+    case 'timetable':    return <SmartTimetable profile={profile} />
     default:             return null
   }
 }
@@ -60,6 +67,7 @@ export default function App() {
   const [profile, setProfile] = useState(null)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [activeTab, setActiveTab] = useState(null)
+  const [needsMFA, setNeedsMFA] = useState(false)
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => setSession(session))
@@ -68,7 +76,15 @@ export default function App() {
   }, [])
 
   useEffect(() => {
-    if (!session) { setProfile(null); return }
+    if (!session) { setProfile(null); setNeedsMFA(false); return }
+    
+    // 🛡️ Security Check: MFA Enforcement
+    supabase.auth.mfa.getAuthenticatorAssuranceLevel().then(({ data }) => {
+      if (data?.nextLevel === 'aal2' && data?.currentLevel !== 'aal2') {
+        setNeedsMFA(true)
+      }
+    })
+
     supabase.from('profiles').select('*').eq('id', session.user.id).maybeSingle()
       .then(({ data }) => {
         setProfile(data)
@@ -77,6 +93,7 @@ export default function App() {
   }, [session])
 
   if (!session) return <Auth />
+  if (needsMFA) return <MFAVerify onVerify={() => setNeedsMFA(false)} />
 
   const menu = MENU[profile?.role] || []
 

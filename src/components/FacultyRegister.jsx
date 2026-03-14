@@ -25,7 +25,7 @@ export default function FacultyRegister({ profile }) {
     setSubjects(subData || [])
     if (subData?.length > 0) setSelectedSubject(subData[0].id)
 
-    const { data: stuData } = await supabase.from('profiles').select('*').eq('role', 'student')
+    const { data: stuData } = await supabase.from('students').select('*').order('pin_number', { ascending: true })
     setStudents(stuData || [])
     setFetching(false)
   }

@@ -62,6 +62,22 @@ export default function Auth() {
     }
   }
 
+  async function signInWithGoogle() {
+    setLoading(true); setError(null)
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo: window.location.origin }
+    })
+    if (error) {
+      if (error.message.includes('missing OAuth secret')) {
+        setError('Google Login is not configured in Supabase. Please add your Client ID and Secret in the Supabase Dashboard.')
+      } else {
+        setError(error.message)
+      }
+    }
+    setLoading(false)
+  }
+
   function switchMode() {
     setIsSignUp(s => !s)
     setError(null); setSuccess(null)
@@ -187,6 +203,22 @@ export default function Auth() {
                 : isSignUp ? <UserPlus size={20} /> : <LogIn size={20} />}
               <span>{loading ? 'Please wait...' : isSignUp ? 'Register to Nexus' : 'Launch Portal'}</span>
             </button>
+
+            {!isSignUp && (
+              <>
+                <div className="flex items-center my-4">
+                  <div className="flex-1 border-t border-white/10" />
+                  <span className="px-3 text-[10px] text-white/20 font-black uppercase tracking-widest">Or continue with</span>
+                  <div className="flex-1 border-t border-white/10" />
+                </div>
+
+                <button type="button" onClick={signInWithGoogle} disabled={loading}
+                  className="w-full bg-white text-gray-800 font-bold py-3 rounded-xl transition-all flex items-center justify-center space-x-3 shadow-md hover:bg-gray-50 active:scale-95 disabled:opacity-50">
+                  <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google" className="w-5 h-5" />
+                  <span>Sign in with Google</span>
+                </button>
+              </>
+            )}
           </form>
 
           <div className="mt-6 pt-5 border-t border-white/10 flex flex-col items-center space-y-2">

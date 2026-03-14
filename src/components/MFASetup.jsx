@@ -51,8 +51,8 @@ export default function MFASetup({ profile }) {
   return (
     <div className="space-y-8 max-w-2xl">
       <header>
-        <h2 className="text-3xl font-black text-[#272A6F]">Two-Factor Authentication</h2>
-        <p className="text-gray-500 mt-1">Protect your faculty account with Google Authenticator (TOTP).</p>
+        <h2 className="text-3xl font-black text-[#272A6F]">Security & 2FA</h2>
+        <p className="text-gray-500 mt-1">Protect your professional account with Google Authenticator (TOTP).</p>
       </header>
 
       {error && (
@@ -75,9 +75,9 @@ export default function MFASetup({ profile }) {
             <div className="w-20 h-20 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-4">
               <Unlock size={32} className="text-orange-500" />
             </div>
-            <h3 className="text-xl font-bold text-gray-800 mb-2">Account Not 2FA Protected</h3>
+            <h3 className="text-xl font-bold text-gray-800 mb-2">Account Not fully Protected</h3>
             <p className="text-gray-500 text-sm mb-6 max-w-sm mx-auto">
-              Enable 2FA to secure your faculty account. You'll scan a QR code with Google Authenticator.
+              Enable 2FA to secure your institution account. This adds an extra layer of security beyond just your email and password.
             </p>
             <button onClick={startEnroll}
               className="bg-[#272A6F] text-white px-8 py-3 rounded-xl font-bold hover:shadow-xl hover:-translate-y-0.5 transition-all">
@@ -134,8 +134,8 @@ export default function MFASetup({ profile }) {
             </div>
             <h3 className="text-xl font-bold text-gray-800 mb-2">Account is 2FA Protected</h3>
             <p className="text-gray-500 text-sm mb-6">
-              Your faculty account is secured with TOTP two-factor authentication. 
-              Every login requires your authenticator app.
+              Your professional account is secured with TOTP two-factor authentication. 
+              Even with Gmail login, you'll need your authenticator app for sensitive actions.
             </p>
             <div className="inline-flex items-center space-x-2 bg-green-100 text-green-700 px-4 py-2 rounded-full text-sm font-bold mb-6">
               <CheckCircle2 size={16} />
