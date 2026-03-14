@@ -3,7 +3,7 @@
 @tailwind utilities;
 
 :root {
-  --giet-navy: #272A6F;
+  --giet-navy: #2d317e;  /* Lightened from #272A6F */
   --giet-gold: #EFBE33;
 }
 
@@ -34,5 +34,43 @@ body {
 }
 
 .giet-gradient {
-  background: linear-gradient(135deg, var(--giet-navy) 0%, #3a3f8c 100%);
+  background: linear-gradient(135deg, var(--giet-navy) 0%, #4a4fb0 100%);
+}
+
+/* Force white background for all inputs and handle autofill */
+input, select, textarea {
+  background-color: white !important;
+  color: #2d317e !important;
+}
+
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+input:-webkit-autofill:active {
+  -webkit-box-shadow: 0 0 0 1000px white inset !important;
+  -webkit-text-fill-color: #2d317e !important;
+  transition: background-color 5000s ease-in-out 0s;
+}
+
+/* Antigravity: Smooth scroll and clean scrollbars */
+html {
+  scroll-behavior: smooth;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #2d317e20;
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #2d317e40;
 }

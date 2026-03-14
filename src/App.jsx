@@ -9,6 +9,7 @@ import SBTETResults from './components/SBTETResults'
 import ClassResults from './components/ClassResults'
 import LMSPortal from './components/LMSPortal'
 import MFASetup from './components/MFASetup'
+import ProjectStatus from './components/ProjectStatus'
 import MFAVerify from './components/MFAVerify'
 import ManagementSuite from './components/ManagementSuite'
 import SmartTimetable from './components/SmartTimetable'
@@ -46,18 +47,19 @@ const MENU = {
   ],
 }
 
-function RoleView({ tab, profile }) {
+function RoleView({ tab, profile, prefill, onPrefillClear }) {
+  const isStaff = profile?.role === 'faculty' || profile?.role === 'admin'
   switch (tab) {
-    case 'dashboard':    return <StudentDashboard profile={profile} />
+    case 'dashboard':    return isStaff ? <ProjectStatus /> : <StudentDashboard profile={profile} />
     case 'sbtet':        return <SBTETResults profile={profile} />
     case 'fees':         return <FinanceBridge profile={profile} />
-    case 'register':     return <FacultyRegister profile={profile} />
+    case 'register':     return <FacultyRegister profile={profile} prefill={prefill} onPrefillClear={onPrefillClear} />
     case 'classresults': return <ClassResults profile={profile} />
     case 'lms':          return <LMSPortal profile={profile} />
     case 'cctv':         return <CCTVMonitor profile={profile} />
     case 'mfa':          return <MFASetup profile={profile} />
-    case 'mgmt':         return <ManagementSuite profile={profile} />
-    case 'timetable':    return <SmartTimetable profile={profile} />
+    case 'mgmt':         return <ManagementSuite profile={profile} prefill={prefill} onPrefillClear={onPrefillClear} />
+    case 'timetable':    return <SmartTimetable profile={profile} onMarkAttendance={(subId) => onPrefillClear(subId)} />
     default:             return null
   }
 }
@@ -66,8 +68,9 @@ export default function App() {
   const [session, setSession] = useState(null)
   const [profile, setProfile] = useState(null)
   const [sidebarOpen, setSidebarOpen] = useState(false)
-  const [activeTab, setActiveTab] = useState(null)
+  const [activeTab, setActiveTab] = useState(localStorage.getItem('nexus_active_tab'))
   const [needsMFA, setNeedsMFA] = useState(false)
+  const [prefill, setPrefill] = useState(null) // { subjectId }
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => setSession(session))
@@ -88,9 +91,16 @@ export default function App() {
     supabase.from('profiles').select('*').eq('id', session.user.id).maybeSingle()
       .then(({ data }) => {
         setProfile(data)
-        setActiveTab(data?.role === 'student' ? 'dashboard' : data?.role === 'faculty' ? 'register' : 'dashboard')
+        if (!activeTab) {
+          const initial = data?.role === 'student' ? 'dashboard' : 'dashboard'
+          setActiveTab(initial)
+        }
       })
   }, [session])
+
+  useEffect(() => {
+    if (activeTab) localStorage.setItem('nexus_active_tab', activeTab)
+  }, [activeTab])
 
   if (!session) return <Auth />
   if (needsMFA) return <MFAVerify onVerify={() => setNeedsMFA(false)} />
@@ -170,7 +180,21 @@ export default function App() {
       {/* Main */}
       <main className="flex-1 lg:ml-64 min-h-screen p-4 lg:p-10">
         <div className="max-w-6xl mx-auto">
-          {profile && activeTab && <RoleView tab={activeTab} profile={profile} />}
+          {profile && activeTab && (
+            <RoleView 
+              tab={activeTab} 
+              profile={profile} 
+              prefill={prefill}
+              onPrefillClear={(p) => {
+                if (typeof p === 'string') { // Jumping TO Attendance
+                  setPrefill({ subjectId: p })
+                  setActiveTab(profile.role === 'admin' ? 'register' : 'register') // register is correct for both
+                } else {
+                  setPrefill(null)
+                }
+              }}
+            />
+          )}
           {!profile && (
             <div className="flex items-center justify-center h-64">
               <div className="text-center">

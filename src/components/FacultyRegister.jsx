@@ -1,33 +1,59 @@
 import React, { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
-import { CheckCircle2, XCircle, Save, Loader2, Users, AlertCircle } from 'lucide-react'
+import { CheckCircle2, XCircle, Save, Loader2, Users, AlertCircle, AlertTriangle } from 'lucide-react'
 
-export default function FacultyRegister({ profile }) {
+export default function FacultyRegister({ profile, prefill, onPrefillClear }) {
   const [students,        setStudents]        = useState([])
   const [subjects,        setSubjects]        = useState([])
   const [selectedSubject, setSelectedSubject] = useState('')
   const [attendanceData,  setAttendanceData]  = useState({})
   const [loading,         setLoading]         = useState(false)
   const [fetching,        setFetching]        = useState(true)
+  const [faculty,         setFaculty]         = useState([])
   const [toast,           setToast]           = useState(null) // { type, msg }
+  const [databaseSyncError, setDatabaseSyncError] = useState(null)
 
-  useEffect(() => { fetchInitialData() }, [])
+  useEffect(() => { fetchData() }, [])
 
   function showToast(type, msg) {
     setToast({ type, msg })
     setTimeout(() => setToast(null), 3000)
   }
 
-  async function fetchInitialData() {
-    setFetching(true)
-    // Fetch all subjects (or filter by faculty_id if subjects are assigned)
-    const { data: subData } = await supabase.from('subjects').select('*')
-    setSubjects(subData || [])
-    if (subData?.length > 0) setSelectedSubject(subData[0].id)
+  async function fetchData() {
+    setLoading(true)
+    try {
+      const [{ data: sub, error: subErr }, { data: fac, error: facErr }, { data: stuData, error: stuErr }] = await Promise.all([
+        supabase.from('subjects').select('*, profiles(full_name)').order('branch', { ascending: true }),
+        supabase.from('profiles').select('id, full_name').eq('role', 'faculty'),
+        supabase.from('students').select('*').order('pin_number', { ascending: true })
+      ])
+      
+      if (subErr || facErr || stuErr) throw (subErr || facErr || stuErr)
+      
+      setSubjects(sub || [])
+      setFaculty(fac || [])
+      setStudents(stuData || [])
 
-    const { data: stuData } = await supabase.from('students').select('*').order('pin_number', { ascending: true })
-    setStudents(stuData || [])
-    setFetching(false)
+      if (sub?.length > 0) {
+        setSelectedSubject(prefill?.subjectId || sub[0].id)
+      }
+      if (prefill?.subjectId) {
+        onPrefillClear() // Consume the prefill
+      }
+
+      setDatabaseSyncError(null)
+    } catch (err) {
+      console.error("FacultyRegister Load Error:", err.message)
+      if (err.message.includes('column') || err.message.includes('relation')) {
+        setDatabaseSyncError("DATABASE OUT OF SYNC: Subjects, Profiles or Students table missing columns. Please run the nexus_repair.sql script.")
+      } else {
+        showToast('error', 'Error loading data: ' + err.message)
+      }
+    } finally {
+      setLoading(false)
+      setFetching(false)
+    }
   }
 
   const toggleAttendance = (studentId, status) => {
@@ -59,8 +85,34 @@ export default function FacultyRegister({ profile }) {
       .from('attendance')
       .upsert(updates, { onConflict: 'student_id,subject_id,date' })
 
-    if (error) showToast('error', 'Error saving: ' + error.message)
-    else showToast('success', `Attendance saved for ${updates.length} students! ✓`)
+    if (error) {
+      console.error("Attendance Sync Final Catch:", error)
+      const isConflict = 
+        error.status === 409 || 
+        error.code === '42P10' || 
+        error.code === '23505' || 
+        error.message?.toLowerCase().includes('conflict') || 
+        error.message?.toLowerCase().includes('on_conflict');
+
+      const isIntegrityError =
+        error.code === '23503' ||
+        error.message?.toLowerCase().includes('foreign key constraint') ||
+        error.message?.toLowerCase().includes('violates');
+
+      if (isConflict) {
+        const msg = "ATTENDANCE CONFLICT (409): Database unique constraint is missing.\n\nPlease run the 'attendance_fix.sql' script in your Supabase SQL Editor to solve this instantly."
+        showToast('error', "Database Sync Required (409)")
+        window.alert(msg) 
+      } else if (isIntegrityError) {
+        const msg = "DATABASE INTEGRITY ERROR (23503): Attendance links are broken.\n\nPlease run the UPDATED 'attendance_fix.sql' script (v4) to repair your database links."
+        showToast('error', "Integrity Link Broken (23503)")
+        window.alert(msg)
+      } else {
+        showToast('error', 'Error saving: ' + error.message)
+      }
+    } else {
+      showToast('success', `Attendance saved for ${updates.length} students! ✓`)
+    }
     setLoading(false)
   }
 
@@ -74,7 +126,10 @@ export default function FacultyRegister({ profile }) {
     <div className="space-y-6">
       <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h2 className="text-3xl font-black text-[#272A6F]">Digital Register</h2>
+          <h2 className="text-3xl font-black text-[#272A6F] flex items-center gap-2">
+            Digital Register
+            <span className="text-[10px] bg-[#272A6F]/10 text-[#272A6F]/40 px-1.5 py-0.5 rounded-md font-mono">v3</span>
+          </h2>
           <p className="text-gray-500">Mark daily attendance for GIET cadets in real-time.</p>
         </div>
         <div className="flex space-x-2">
@@ -88,6 +143,16 @@ export default function FacultyRegister({ profile }) {
           </button>
         </div>
       </header>
+
+      {databaseSyncError && (
+        <div className="p-4 bg-amber-50 border-2 border-amber-200 rounded-2xl flex items-start space-x-3 text-amber-700 shadow-xl shadow-amber-900/5 animate-bounce-subtle">
+          <AlertTriangle size={24} className="mt-0.5 flex-shrink-0" />
+          <div>
+            <p className="font-black text-sm uppercase tracking-wider mb-1">System Action Required</p>
+            <p className="text-xs font-medium leading-relaxed">{databaseSyncError}</p>
+          </div>
+        </div>
+      )}
 
       {/* Toast */}
       {toast && (
@@ -142,11 +207,13 @@ export default function FacultyRegister({ profile }) {
                 {students.map(student => {
                   const status = attendanceData[student.id]
                   return (
-                    <tr key={student.id} className={`transition-colors ${
-                      status === 'present' ? 'bg-green-50' :
-                      status === 'absent'  ? 'bg-red-50'   : 'hover:bg-white/40'}`}>
-                      <td className="px-6 py-3 font-mono text-sm text-gray-500">
-                        {student.pin_number || '—'}
+                    <tr key={student.id} className={`transition-colors border-l-4 ${
+                      status === 'present' ? 'bg-green-50 border-green-500' :
+                      status === 'absent'  ? 'bg-red-50 border-red-500'   : 'hover:bg-white/40 border-transparent'}`}>
+                      <td className="px-6 py-3">
+                        <span className="font-black text-[#272A6F] font-mono text-sm px-2 py-1 bg-gray-100 rounded">
+                          {student.pin_number || '—'}
+                        </span>
                       </td>
                       <td className="px-6 py-3 font-bold text-gray-800">{student.full_name}</td>
                       <td className="px-6 py-3 text-sm text-gray-500">{student.branch || '—'}</td>

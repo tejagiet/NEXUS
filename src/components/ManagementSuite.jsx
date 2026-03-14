@@ -1,9 +1,14 @@
 import React, { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
-import { ToggleLeft, ToggleRight, Save, User2, MessageSquarePlus, Inbox, Loader2, CheckCircle2, Phone, KeyRound, Send, UserPlus, Mail, Lock, BadgeCheck, Trash2, AlertCircle, BookOpen, BookMarked, Layers } from 'lucide-react'
+import { ToggleLeft, ToggleRight, Save, User2, MessageSquarePlus, Inbox, Loader2, CheckCircle2, Phone, KeyRound, Send, UserPlus, Mail, Lock, BadgeCheck, Trash2, AlertCircle, BookOpen, BookMarked, Layers, FileSpreadsheet, Download, Upload, ShieldCheck, AlertTriangle, Users, MessageSquare } from 'lucide-react'
 
-export default function ManagementSuite({ profile }) {
-  const [activeTab, setActiveTab] = useState('register')
+const BRANCHES = ['CME', 'ECE', 'EEE', 'ME', 'CIVIL', 'AI', 'IT', 'CSE']
+const SECTIONS = ['A', 'B', 'C', 'D']
+const ROLES = ['student', 'faculty', 'admin']
+
+export default function ManagementSuite({ profile, prefill, onPrefillClear }) {
+  const [activeTab, setActiveTab] = useState('users')
+  const [databaseSyncError, setDatabaseSyncError] = useState(null)
   const tabs = [
     { id: 'register', label: 'Digital Register', icon: ToggleRight },
     { id: 'profiles', label: 'Profile Editor',   icon: User2 },
@@ -20,33 +25,61 @@ export default function ManagementSuite({ profile }) {
 
   return (
     <div className="space-y-6">
-      <header>
-        <h2 className="text-3xl font-black text-[#272A6F]">Management Suite</h2>
-        <p className="text-gray-500 mt-1">Digital register, student profiles, and feedback inbox.</p>
-      </header>
-      <div className="flex space-x-2 border-b border-gray-200 pb-0">
-        {tabs.map(t => (
-          <button key={t.id} onClick={() => setActiveTab(t.id)}
-            className={`flex items-center space-x-2 px-5 py-3 text-sm font-bold rounded-t-xl transition-all
-              ${activeTab === t.id ? 'bg-white text-[#272A6F] border border-b-0 border-gray-200 -mb-px' : 'text-gray-400 hover:text-gray-600'}`}>
-            <t.icon size={16} />
-            <span>{t.label}</span>
-          </button>
-        ))}
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-black text-[#272A6F] flex items-center gap-3">
+            <ShieldCheck size={28} className="text-[#EFBE33]" />
+            Management Suite
+            <span className="text-[10px] bg-[#272A6F]/10 text-[#272A6F]/40 px-1.5 py-0.5 rounded-md font-mono">v3</span>
+          </h2>
+          <p className="text-gray-500 text-sm font-medium">Control center for students, subjects, and system health.</p>
+        </div>
+        <div className="flex bg-gray-100 p-1 rounded-2xl border border-gray-200 shadow-inner">
+          {[
+            { id: 'register', label: 'Attendance', icon: ToggleRight },
+            { id: 'users',    label: 'Accounts',   icon: Users },
+            { id: 'subjects', label: 'Subjects',   icon: BookOpen },
+            { id: 'feedback', label: 'Feedback',   icon: MessageSquare },
+          ].map(t => (
+            <button
+              key={t.id}
+              onClick={() => setActiveTab(t.id)}
+              className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-xs font-black transition-all ${
+                activeTab === t.id 
+                  ? 'bg-white text-[#272A6F] shadow-lg scale-105' 
+                  : 'text-gray-400 hover:text-gray-600'
+              }`}
+            >
+              <t.icon size={14} />
+              <span>{t.label}</span>
+            </button>
+          ))}
+        </div>
       </div>
-      <div className="bg-white rounded-b-3xl rounded-tr-3xl border border-gray-200 p-6">
-        {activeTab === 'register' && <DigitalRegister profile={profile} />}
+
+      {databaseSyncError && (
+        <div className="p-4 bg-amber-50 border-2 border-amber-200 rounded-2xl flex items-start space-x-3 text-amber-700 shadow-xl shadow-amber-900/5 animate-bounce-subtle">
+          <AlertTriangle size={24} className="mt-0.5 flex-shrink-0" />
+          <div>
+            <p className="font-black text-sm uppercase tracking-wider mb-1">System Action Required</p>
+            <p className="text-xs font-medium leading-relaxed">{databaseSyncError}</p>
+          </div>
+        </div>
+      )}
+
+      <div className="bg-white rounded-[2.5rem] p-4 lg:p-8 shadow-2xl shadow-[#272A6F]/5 border border-gray-100">
+        {activeTab === 'register' && <DigitalRegister profile={profile} prefill={prefill} onPrefillClear={onPrefillClear} setDatabaseSyncError={setDatabaseSyncError} />}
         {activeTab === 'profiles' && <ProfileEditor profile={profile} />}
         {activeTab === 'feedback' && <FeedbackInbox profile={profile} />}
-        {activeTab === 'users'    && <AdminUserCreator profile={profile} />}
-        {activeTab === 'subjects' && <SubjectManager profile={profile} />}
+        {activeTab === 'users'    && <AdminUserCreator profile={profile} setDatabaseSyncError={setDatabaseSyncError} />}
+        {activeTab === 'subjects' && <SubjectManager profile={profile} setDatabaseSyncError={setDatabaseSyncError} />}
       </div>
     </div>
   )
 }
 
 /* ── Digital Register ─────────────────────────────── */
-function DigitalRegister({ profile }) {
+function DigitalRegister({ profile, prefill, onPrefillClear, setDatabaseSyncError }) {
   const [students,   setStudents]   = useState([])
   const [subjects,   setSubjects]   = useState([])
   const [subject,    setSubject]    = useState('')
@@ -58,14 +91,36 @@ function DigitalRegister({ profile }) {
 
   useEffect(() => {
     async function load() {
-      const [{ data: stu }, { data: sub }] = await Promise.all([
-        supabase.from('students').select('id,full_name,pin_number,section,branch').order('pin_number', { ascending: true }),
-        supabase.from('subjects').select('*')
-      ])
-      setStudents(stu || [])
-      setSubjects(sub || [])
-      if (sub?.length) setSubject(sub[0].id)
-      setLoading(false)
+      // Defensive check for prefill which may cause ReferenceErrors if props aren't tracked correctly
+      const localPrefill = (typeof prefill !== 'undefined') ? prefill : null;
+      const localOnPrefillClear = (typeof onPrefillClear === 'function') ? onPrefillClear : () => {};
+
+      try {
+        const [{ data: stu, error: stuErr }, { data: sub, error: subErr }] = await Promise.all([
+          supabase.from('students').select('id,full_name,pin_number,section,branch').order('pin_number', { ascending: true }),
+          supabase.from('subjects').select('*')
+        ])
+        
+        if (stuErr || subErr) throw (stuErr || subErr)
+
+        setStudents(stu || [])
+        setSubjects(sub || [])
+        if (sub?.length) {
+          const initial = localPrefill?.subjectId || sub[0].id
+          setSubject(initial)
+          if (localPrefill?.subjectId) {
+            localOnPrefillClear()
+          }
+        }
+        setDatabaseSyncError(null)
+      } catch (err) {
+        console.error("Digital Register Load Error:", err.message)
+        if (err.message.includes('404') || err.message.includes('relation') || err.message.includes('column')) {
+          setDatabaseSyncError("DATABASE OUT OF SYNC: Essential tables (students/subjects) are missing. Please run the nexus_repair.sql script.")
+        }
+      } finally {
+        setLoading(false)
+      }
     }
     load()
 
@@ -89,9 +144,39 @@ function DigitalRegister({ profile }) {
       student_id, subject_id: subject, status,
       marked_by: profile.id, date: new Date().toISOString().split('T')[0]
     }))
-    await supabase.from('attendance').upsert(rows, { onConflict: 'student_id,subject_id,date' })
-    setSaving(false); setSaved(true)
-    setTimeout(() => setSaved(false), 3000)
+    try {
+      const { error: upsertErr } = await supabase.from('attendance').upsert(rows, { onConflict: 'student_id,subject_id,date' })
+      if (upsertErr) throw upsertErr
+      setSaving(false); setSaved(true)
+      setTimeout(() => setSaved(false), 3000)
+    } catch (err) {
+      console.error("Attendance Sync Critical Error:", err)
+      setSaving(false)
+      
+      const isConflict = 
+        err.status === 409 || 
+        err.code === '42P10' || 
+        err.code === '23505' || 
+        err.message?.toLowerCase().includes('conflict') || 
+        err.message?.toLowerCase().includes('on_conflict');
+
+      const isIntegrityError =
+        err.code === '23503' ||
+        err.message?.toLowerCase().includes('foreign key constraint') ||
+        err.message?.toLowerCase().includes('violates');
+
+      if (isConflict) {
+        const msg = "ATTENDANCE CONFLICT (409): Database unique constraint is missing.\n\nPlease run the 'attendance_fix.sql' script in your Supabase SQL Editor to solve this instantly."
+        setDatabaseSyncError(msg)
+        window.alert(msg) 
+      } else if (isIntegrityError) {
+        const msg = "DATABASE INTEGRITY ERROR (23503): Attendance links are broken.\n\nPlease run the UPDATED 'attendance_fix.sql' script (v4) to repair your database links."
+        setDatabaseSyncError(msg)
+        window.alert(msg)
+      } else {
+        setDatabaseSyncError("Failed to save attendance: " + (err.message || "Unknown Error"))
+      }
+    }
   }
 
   if (loading) return <div className="flex justify-center py-12"><Loader2 className="animate-spin text-[#272A6F]" /></div>
@@ -130,14 +215,15 @@ function DigitalRegister({ profile }) {
             const absent  = marks[s.id] === 'absent'
             return (
               <div key={s.id} className={`flex items-center justify-between p-4 rounded-2xl border transition-all ${present ? 'bg-green-50 border-green-200' : absent ? 'bg-red-50 border-red-200' : 'bg-gray-50 border-gray-200'}`}>
-                {/* ... existing card content ... */}
                 <div className="flex items-center space-x-3">
-                  <div className="w-8 h-8 bg-[#272A6F]/10 rounded-full flex items-center justify-center text-xs font-bold text-[#272A6F]">
+                  <div className="w-10 h-10 bg-[#272A6F]/10 rounded-xl flex items-center justify-center text-xs font-black text-[#272A6F]">
                     {s.full_name?.[0] || '?'}
                   </div>
                   <div>
                     <p className="font-bold text-sm text-gray-800">{s.full_name}</p>
-                    <p className="font-mono text-xs text-gray-400">{s.pin_number}</p>
+                    <p className="font-black text-[10px] text-[#272A6F] font-mono bg-white px-1.5 py-0.5 rounded border border-gray-100 mt-0.5">
+                      {s.pin_number}
+                    </p>
                   </div>
                 </div>
                 <button onClick={() => toggle(s.id)} className="transition-all">
@@ -315,12 +401,13 @@ function StudentFeedback({ profile }) {
           <span>{sending ? 'Sending...' : 'Send to Principal'}</span>
         </button>
       </form>
+```
     </div>
   )
 }
 
 /* ── Admin User Creator ─────────────────────────── */
-function AdminUserCreator() {
+function AdminUserCreator({ profile, setDatabaseSyncError }) {
   const ROLES    = ['student', 'faculty', 'admin']
   const BRANCHES = ['CME','ECE','EEE','ME','CIVIL','AI','IT','CSE']
   const SECTIONS = ['A', 'B', 'C']
@@ -331,6 +418,80 @@ function AdminUserCreator() {
   const [saving,  setSaving]  = useState(false)
   const [msg,     setMsg]     = useState(null)
   const [loading, setLoading] = useState(true)
+  const [importing, setImporting] = useState(false)
+  const [results, setResults] = useState(null)
+  const [error, setError] = useState(null)
+
+  const downloadTemplate = () => {
+    const csv = "PIN,Name,branch,password\n22295-M-001,John Doe,CME,GIET@2026\n22295-M-002,Jane Smith,ECE,GIET@2026"
+    const blob = new Blob([csv], { type: 'text/csv' })
+    const url = window.URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'nexus_student_template.csv'
+    a.click()
+  }
+
+  const handleFileUpload = async (e) => {
+    const file = e.target.files[0]
+    if (!file) return
+    
+    setImporting(true)
+    setError(null)
+    setResults(null)
+
+    const reader = new FileReader()
+    reader.onload = async (event) => {
+      try {
+        const text = event.target.result
+        const rows = text.split('\n').filter(r => r.trim()).slice(1) // Skip header
+        const rowContent = rows
+          .map(row => {
+            const cols = row.split(',').map(s => s?.trim())
+            if (cols.length < 2) return null // Need at least PIN and Name
+            
+            const [pin, name, branch, password] = cols
+            if (!pin || !name) return null
+            
+            const finalEmail = `${pin.toLowerCase()}@nexusgiet.edu.in`
+            return { 
+              pin_number: pin, 
+              full_name: name, 
+              branch: branch || 'CME', 
+              password: password || 'GIET@2026',
+              email: finalEmail 
+            }
+          })
+          .filter(Boolean)
+
+        if (rowContent.length === 0) throw new Error("No valid student data found in CSV. Required format: PIN, Name, branch, password.")
+
+        console.log("Invoking Edge Function with students:", rowContent.length)
+        const { data, error: funcError } = await supabase.functions.invoke('batch-user-creator', {
+          body: { students: rowContent }
+        })
+
+        if (funcError) {
+          console.error("Edge Function Error details:", funcError)
+          let errorMsg = funcError.message || "Request failed."
+          
+          if (errorMsg.includes("401") || errorMsg.includes("Unauthorized")) {
+            errorMsg = "Unauthorized (401): Missing Service Role Key. Please add the 'SUPABASE_SERVICE_ROLE_KEY' secret in the Supabase Dashboard > Functions > Settings."
+          } else if (errorMsg.includes("404")) {
+            errorMsg = "404 Not Found: Edge Function not deployed. Run 'supabase functions deploy batch-user-creator' in your terminal."
+          }
+          
+          throw new Error(`Edge Function: ${errorMsg}`)
+        }
+        setResults(data.results)
+      } catch (err) {
+        setError(err.message)
+      } finally {
+        setImporting(false)
+      }
+    }
+    reader.readAsText(file)
+  }
 
   useEffect(() => { 
     fetchUsers()
@@ -338,10 +499,48 @@ function AdminUserCreator() {
     return () => { supabase.removeChannel(channel) }
   }, [])
 
+  // 📧 Real-time email derivation from PIN
+  useEffect(() => {
+    if (form.role === 'student' && form.pin_number && !form.email) {
+      const derived = `${form.pin_number.trim().toLowerCase()}@nexusgiet.edu.in`
+      setForm(f => ({ ...f, email: derived }))
+    }
+  }, [form.pin_number, form.role])
+
   async function fetchUsers() {
     setLoading(true)
-    const { data } = await supabase.from('profiles').select('id,full_name,email,role,pin_number,branch,section').order('created_at', { ascending: false }).limit(80)
-    setUsers(data || [])
+    try {
+      // Primary attempt: fetch all columns including email and section
+      const { data, error: fetchErr } = await supabase
+        .from('profiles')
+        .select('id,full_name,email,role,pin_number,branch,section')
+        .order('created_at', { ascending: false })
+        .limit(80)
+      
+      if (fetchErr) throw fetchErr
+      setUsers(data || [])
+      setDatabaseSyncError(null)
+    } catch (err) {
+      console.error("Fetch Users Error:", err.message)
+      
+      // Notify user about missing columns specifically
+      if (err.message.includes('email') || err.message.includes('section') || err.message.includes('400')) {
+        setDatabaseSyncError("DATABASE OUT OF SYNC: You are missing columns (email/section) in your 'profiles' table. Please run the nexus_repair.sql script in Supabase SQL Editor.")
+      }
+
+      // Secondary attempt: fallback if email or section columns are missing
+      try {
+        const { data: fallbackData } = await supabase
+          .from('profiles')
+          .select('id,full_name,role,pin_number,branch')
+          .order('created_at', { ascending: false })
+          .limit(80)
+          
+        setUsers(fallbackData || [])
+      } catch (fallbackErr) {
+        setUsers([])
+      }
+    }
     setLoading(false)
   }
 
@@ -354,15 +553,17 @@ function AdminUserCreator() {
     }
     setSaving(true); setMsg(null)
     try {
+      const cleanPin = form.pin_number.trim().toLowerCase()
+      const finalEmail = form.email.trim().toLowerCase() || `${cleanPin || Date.now()}@nexusgiet.edu.in`
       const { data: authData, error: authErr } = await supabase.auth.signUp({
-        email: form.email.trim(), password: form.password,
-        options: { data: { full_name: form.full_name, role: form.role } }
+        email: finalEmail, password: form.password,
+        options: { data: { full_name: form.full_name, role: form.role, pin_number: form.pin_number, branch: form.branch } }
       })
       if (authErr) throw authErr
       const userId = authData.user?.id
       if (userId) {
         await supabase.from('profiles').upsert({
-          id: userId, full_name: form.full_name.trim(), email: form.email.trim(),
+          id: userId, full_name: form.full_name.trim(), email: finalEmail,
           pin_number: form.pin_number.trim(), branch: form.branch, role: form.role,
           section: form.role === 'student' ? form.section : null
         }, { onConflict: 'id' })
@@ -408,6 +609,55 @@ function AdminUserCreator() {
         </div>
       </div>
 
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 p-8 glass rounded-[2.5rem] bg-indigo-50/30 border-indigo-100">
+        <div>
+          <h3 className="text-xl font-black text-indigo-900 flex items-center space-x-2">
+            <FileSpreadsheet className="text-indigo-600" />
+            <span>Batch Student Import</span>
+          </h3>
+          <p className="text-gray-500 text-sm mt-1">Upload CSV to create hundreds of accounts instantly.</p>
+        </div>
+        <div className="flex items-center space-x-3">
+          <button onClick={downloadTemplate} className="flex items-center space-x-2 px-4 py-2 bg-white text-indigo-600 rounded-xl text-sm font-bold hover:bg-indigo-50 transition-all border border-indigo-100">
+            <Download size={16} />
+            <span>Template</span>
+          </button>
+          <label className="flex items-center space-x-2 px-6 py-2 bg-indigo-600 text-white rounded-xl text-sm font-black cursor-pointer hover:shadow-xl transition-all shadow-indigo-600/20">
+            <Upload size={16} />
+            <span>{importing ? 'Importing...' : 'Upload CSV'}</span>
+            <input type="file" accept=".csv" onChange={handleFileUpload} className="hidden" disabled={importing} />
+          </label>
+        </div>
+      </div>
+
+      {error && (
+        <div className="p-4 bg-red-50 border border-red-100 rounded-2xl flex items-center space-x-3 text-red-600 text-sm animate-shake">
+          <AlertCircle size={18} />
+          <p className="font-bold">{error}</p>
+        </div>
+      )}
+
+      {results && (
+        <div className="glass rounded-[2rem] overflow-hidden border-green-200">
+          <div className="p-4 bg-green-50 border-b border-green-100 flex items-center justify-between">
+            <p className="text-sm font-bold text-green-700">Import Complete: {results.length} processed</p>
+            <button onClick={() => setResults(null)} className="text-xs text-green-600 underline">Clear Results</button>
+          </div>
+          <div className="max-h-60 overflow-y-auto p-2 bg-white/50">
+            {results.map((r, i) => (
+              <div key={i} className="flex items-center justify-between p-2 hover:bg-gray-50 rounded-lg text-xs border-b border-gray-50 last:border-0">
+                <span className="font-mono font-bold text-gray-400">{r.pin}</span>
+                <span className={r.status === 'success' ? 'text-green-500 font-bold' : 'text-red-500 font-bold'}>
+                  {r.status === 'success' ? 'Created ✓' : r.message}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="h-px bg-gray-100" />
+
       {msg && (
         <div className={`flex items-start space-x-3 p-4 rounded-2xl border text-sm ${msg.type === 'success' ? 'bg-green-50 border-green-200 text-green-700' : 'bg-red-50 border-red-200 text-red-700'}`}>
           {msg.type === 'success' ? <BadgeCheck size={18} className="flex-shrink-0 mt-0.5" /> : <AlertCircle size={18} className="flex-shrink-0 mt-0.5" />}
@@ -419,37 +669,22 @@ function AdminUserCreator() {
         <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">New User Details</p>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
+            <label className="block text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1.5">Hall Ticket / PIN *</label>
+            <input value={form.pin_number} onChange={e => set('pin_number', e.target.value)} required placeholder="e.g. 24295-AI-001" autoComplete="off"
+              className="w-full h-11 bg-white border-2 border-gray-100 rounded-xl px-4 font-mono text-sm font-bold focus:outline-none focus:border-[#272A6F] transition-all" />
+          </div>
+          <div>
             <label className="block text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1.5">Full Name *</label>
             <input value={form.full_name} onChange={e => set('full_name', e.target.value)} required placeholder="e.g. MOLLETI TEJA" autoComplete="off"
               className="w-full h-11 bg-white border-2 border-gray-100 rounded-xl px-4 text-sm font-bold focus:outline-none focus:border-[#272A6F] transition-all" />
           </div>
           <div>
-            <label className="block text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1.5">Email *</label>
-            <div className="relative">
-              <Mail size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
-              <input value={form.email} onChange={e => set('email', e.target.value)} required type="email" placeholder="user@giet.ac.in" autoComplete="off"
-                className="w-full h-11 bg-white border-2 border-gray-100 rounded-xl pl-9 pr-4 text-sm font-bold focus:outline-none focus:border-[#272A6F] transition-all" />
-            </div>
-          </div>
-          <div>
-            <label className="block text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1.5">Hall Ticket / PIN</label>
-            <input value={form.pin_number} onChange={e => set('pin_number', e.target.value)} placeholder="e.g. 24295-AI-001" autoComplete="off"
-              className="w-full h-11 bg-white border-2 border-gray-100 rounded-xl px-4 font-mono text-sm font-bold focus:outline-none focus:border-[#272A6F] transition-all" />
-          </div>
-          <div>
-            <label className="block text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1.5">Temporary Password *</label>
+            <label className="block text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1.5">Create Password *</label>
             <div className="relative">
               <Lock size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
               <input value={form.password} onChange={e => set('password', e.target.value)} required type="password" placeholder="Min. 6 characters" autoComplete="new-password"
                 className="w-full h-11 bg-white border-2 border-gray-100 rounded-xl pl-9 pr-4 text-sm font-bold focus:outline-none focus:border-[#272A6F] transition-all" />
             </div>
-          </div>
-          <div>
-            <label className="block text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1.5">Role *</label>
-            <select value={form.role} onChange={e => set('role', e.target.value)}
-              className="w-full h-11 border-2 border-gray-100 rounded-xl px-4 text-sm font-bold focus:outline-none focus:border-[#272A6F] bg-white transition-all">
-              {ROLES.map(r => <option key={r} value={r}>{r.charAt(0).toUpperCase() + r.slice(1)}</option>)}
-            </select>
           </div>
           <div>
             <label className="block text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1.5">Branch</label>
@@ -458,15 +693,28 @@ function AdminUserCreator() {
               {BRANCHES.map(b => <option key={b}>{b}</option>)}
             </select>
           </div>
-          {form.role === 'student' && (
-            <div>
-              <label className="block text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1.5">Section</label>
-              <select value={form.section} onChange={e => set('section', e.target.value)}
-                className="w-full h-11 border-2 border-gray-100 rounded-xl px-4 text-sm font-bold focus:outline-none focus:border-[#272A6F] bg-white transition-all">
-                {SECTIONS.map(s => <option key={s}>{s}</option>)}
-              </select>
+          <div>
+            <label className="block text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1.5">Section</label>
+            <select value={form.section} onChange={e => set('section', e.target.value)}
+              className="w-full h-11 border-2 border-gray-100 rounded-xl px-4 text-sm font-bold focus:outline-none focus:border-[#272A6F] bg-white transition-all">
+              {SECTIONS.map(s => <option key={s}>{s}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1.5">Advanced: Role (Optional)</label>
+            <select value={form.role} onChange={e => set('role', e.target.value)}
+              className="w-full h-11 border-2 border-gray-100 rounded-xl px-4 text-sm font-bold focus:outline-none focus:border-[#272A6F] bg-white transition-all">
+              {ROLES.map(r => <option key={r} value={r}>{r.charAt(0).toUpperCase() + r.slice(1)}</option>)}
+            </select>
+          </div>
+          <div className="md:col-span-2">
+            <label className="block text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1.5">Custom Email (Optional - Generated from PIN by default)</label>
+            <div className="relative">
+              <Mail size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
+              <input value={form.email} onChange={e => set('email', e.target.value)} type="email" placeholder="Leave blank to auto-generate" autoComplete="off"
+                className="w-full h-11 bg-white border-2 border-gray-100 rounded-xl pl-9 pr-4 text-sm font-bold focus:outline-none focus:border-[#272A6F] transition-all" />
             </div>
-          )}
+          </div>
         </div>
         <button type="submit" disabled={saving}
           className="w-full h-12 bg-[#272A6F] text-white rounded-xl font-black text-sm flex items-center justify-center space-x-2 hover:shadow-xl hover:-translate-y-0.5 transition-all active:scale-95 disabled:opacity-50">
@@ -508,8 +756,7 @@ function AdminUserCreator() {
 }
 
 /* ── Subject Manager ───────────────────────────── */
-function SubjectManager() {
-  const BRANCHES = ['CME','ECE','EEE','ME','CIVIL','AI','IT','CSE']
+function SubjectManager({ profile, setDatabaseSyncError }) {
   const blank = { name: '', code: '', branch: 'CME', faculty_id: '' }
 
   const [form, setForm] = useState(blank)
@@ -527,13 +774,25 @@ function SubjectManager() {
 
   async function fetchData() {
     setLoading(true)
-    const [subRes, facRes] = await Promise.all([
-      supabase.from('subjects').select('*, profiles(full_name)').order('branch', { ascending: true }),
-      supabase.from('profiles').select('id, full_name').eq('role', 'faculty')
-    ])
-    setSubjects(subRes.data || [])
-    setFaculty(facRes.data || [])
-    setLoading(false)
+    try {
+      const [{ data: sub, error: subErr }, { data: fac, error: facErr }] = await Promise.all([
+        supabase.from('subjects').select('*, profiles(full_name)').order('branch', { ascending: true }),
+        supabase.from('profiles').select('id, full_name').eq('role', 'faculty')
+      ])
+      
+      if (subErr || facErr) throw (subErr || facErr)
+      
+      setSubjects(sub || [])
+      setFaculty(fac || [])
+      setDatabaseSyncError(null)
+    } catch (err) {
+      console.error("Subject Manager Load Error:", err.message)
+      if (err.message.includes('column') || err.message.includes('relation')) {
+        setDatabaseSyncError("DATABASE OUT OF SYNC: Subjects or Profiles table missing columns. Please run the nexus_repair.sql script.")
+      }
+    } finally {
+      setLoading(false)
+    }
   }
 
   function set(k, v) { setForm(f => ({ ...f, [k]: v })) }

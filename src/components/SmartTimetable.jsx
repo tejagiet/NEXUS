@@ -3,22 +3,21 @@ import { supabase } from '../lib/supabase'
 import { Calendar, Clock, Plus, Trash2, Save, Loader2, CheckCircle2, AlertCircle, Info } from 'lucide-react'
 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
-const SLOTS = [1, 2, 3, 4, 5, 6, 7, 8]
+const SLOTS = [1, 2, 3, 4, 5, 6, 7]
 const SLOT_TIMES = {
-  1: '09:00 - 10:00',
-  2: '10:00 - 11:00',
-  3: '11:00 - 12:00',
-  4: '12:00 - 01:00',
-  5: '02:00 - 03:00',
-  6: '03:00 - 04:00',
-  7: '04:00 - 05:00',
-  8: '05:00 - 06:00',
+  1: '09:30 - 10:15',
+  2: '10:15 - 11:00',
+  3: '11:00 - 11:45',
+  4: '11:45 - 12:30',
+  5: '01:15 - 02:15',
+  6: '02:15 - 03:15',
+  7: '03:15 - 04:15',
 }
 
 const BRANCHES = ['CME', 'ECE', 'EEE', 'ME', 'CIVIL', 'AI', 'IT', 'CSE']
 const SEMESTERS = ['Sem 1', 'Sem 2', 'Sem 3', 'Sem 4', 'Sem 5', 'Sem 6']
 
-export default function SmartTimetable({ profile }) {
+export default function SmartTimetable({ profile, onMarkAttendance }) {
   const [branch, setBranch] = useState(profile?.branch || 'CME')
   const [semester, setSemester] = useState('Sem 4')
   const [section, setSection] = useState(profile?.section || 'A')
@@ -97,7 +96,12 @@ export default function SmartTimetable({ profile }) {
       <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h2 className="text-3xl font-black text-[#272A6F]">Smart Timetable</h2>
-          <p className="text-gray-500 mt-1">Class schedule for {branch} {semester} - Section {section}</p>
+          <div className="flex items-center space-x-2 mt-1">
+            <p className="text-gray-500 font-medium">Daily schedule for {branch} - Sec {section}</p>
+            <span className="text-xs px-2 py-0.5 bg-blue-100 text-blue-600 rounded-full font-bold">
+              {new Date().toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'short' })}
+            </span>
+          </div>
         </div>
         <div className="flex items-center space-x-2">
           <select value={branch} onChange={e => setBranch(e.target.value)} disabled={profile?.role === 'student' && profile?.branch}
@@ -155,13 +159,21 @@ export default function SmartTimetable({ profile }) {
                             <p className="text-[9px] font-mono font-bold text-blue-400 mt-1">{entry.subjects?.code}</p>
                           </div>
                           {isFaculty && (
-                            <div className="flex justify-end mt-2 space-x-1 opacity-0 group-hover/slot:opacity-100 transition-opacity">
-                              <button onClick={() => setActiveSlot({ day, slot })} className="p-1 text-blue-600 hover:bg-blue-200 rounded-md">
-                                <Plus size={12} />
+                            <div className="flex justify-between items-end mt-2">
+                              <button 
+                                onClick={() => onMarkAttendance(entry.subject_id)}
+                                className="text-[9px] px-2 py-1 bg-[#272A6F] text-white rounded-lg font-bold hover:bg-[#343a8a] transition-all shadow-sm"
+                              >
+                                Mark Attendance
                               </button>
-                              <button onClick={() => clearSlot(day, slot)} className="p-1 text-red-600 hover:bg-red-200 rounded-md">
-                                <Trash2 size={12} />
-                              </button>
+                              <div className="flex space-x-1 opacity-0 group-hover/slot:opacity-100 transition-opacity">
+                                <button onClick={() => setActiveSlot({ day, slot })} className="p-1 text-blue-600 hover:bg-blue-200 rounded-md">
+                                  <Plus size={12} />
+                                </button>
+                                <button onClick={() => clearSlot(day, slot)} className="p-1 text-red-600 hover:bg-red-200 rounded-md">
+                                  <Trash2 size={12} />
+                                </button>
+                              </div>
                             </div>
                           )}
                         </div>
