@@ -5,6 +5,7 @@ import { MessageSquare, Users, Send, Loader2, Hash, Shield, Info, Star, Trash2, 
 export default function CommunityHub({ profile }) {
   const [tab, setTab] = useState('chat') // 'chat' | 'clubs' | 'events'
   const [rooms, setRooms] = useState([])
+  const [facultySubjects, setFacultySubjects] = useState([])
   const [activeRoom, setActiveRoom] = useState(null)
   const [messages, setMessages] = useState([])
   const [newMessage, setNewMessage] = useState('')
@@ -13,6 +14,9 @@ export default function CommunityHub({ profile }) {
 
   useEffect(() => {
     fetchRooms()
+    if (['faculty', 'class_teacher', 'hod'].includes(profile.role)) {
+      fetchFacultySubjects()
+    }
   }, [])
 
   useEffect(() => {
@@ -35,8 +39,13 @@ export default function CommunityHub({ profile }) {
     const { data } = await supabase.from('chat_rooms').select('*, subjects(name)')
       .or(`branch.eq.${profile.branch},branch.eq.ALL`)
     setRooms(data || [])
-    if (data?.length) setActiveRoom(data[0])
+    if (data?.length && !activeRoom) setActiveRoom(data[0])
     setLoading(false)
+  }
+
+  async function fetchFacultySubjects() {
+    const { data } = await supabase.from('subjects').select('*').eq('faculty_id', profile.id)
+    setFacultySubjects(data || [])
   }
 
   async function createRoom(roomData) {
@@ -90,11 +99,27 @@ export default function CommunityHub({ profile }) {
           <div className="w-64 bg-white rounded-3xl border border-gray-100 p-4 flex flex-col overflow-hidden">
             <div className="flex items-center justify-between mb-4 px-2">
               <p className="text-[10px] font-black uppercase text-gray-400">Channels</p>
-              {['admin', 'faculty', 'hod', 'principal'].includes(profile.role) && (
+              {['admin', 'faculty', 'hod', 'principal', 'class_teacher'].includes(profile.role) && (
                 <button onClick={() => {
-                  const name = prompt("Room Name:")
-                  const sec = prompt("Section (A/B/C):", "A")
-                  if (name) createRoom({ name, section: sec, branch: profile.branch || 'ALL' })
+                  let subId = null;
+                  let roomName = "";
+                  let sec = "A";
+
+                  if (facultySubjects.length > 0) {
+                    const subList = facultySubjects.map((s, i) => `${i + 1}. ${s.name}`).join("\n");
+                    const choice = prompt(`Select Subject for Chat Room:\n${subList}\n(Enter number)`);
+                    const index = parseInt(choice) - 1;
+                    if (!isNaN(index) && facultySubjects[index]) {
+                      subId = facultySubjects[index].id;
+                      roomName = facultySubjects[index].name;
+                      sec = prompt(`Section for ${roomName} (A/B/C):`, "A") || "A";
+                    }
+                  } else {
+                    roomName = prompt("Room Name:");
+                    sec = prompt("Section (A/B/C):", "A") || "A";
+                  }
+
+                  if (roomName) createRoom({ name: roomName, subject_id: subId, section: sec, branch: profile.branch || 'ALL' })
                 }} className="text-[#272A6F] hover:text-[#EFBE33] transition-colors"><Plus size={14} /></button>
               )}
             </div>

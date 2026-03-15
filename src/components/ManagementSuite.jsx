@@ -7,23 +7,21 @@ const SECTIONS = ['A', 'B', 'C', 'D']
 const ROLES = ['student', 'faculty', 'admin', 'principal', 'vice_principal', 'hod', 'class_teacher']
 
 export default function ManagementSuite({ profile, prefill, onPrefillClear }) {
-  const [activeTab, setActiveTab] = useState('users')
+  const [activeTab, setActiveTab] = useState(profile?.role === 'student' ? 'profiles' : 'register')
   const [databaseSyncError, setDatabaseSyncError] = useState(null)
   const tabs = [
     { id: 'register', label: 'Digital Register', icon: ToggleRight },
-    { id: 'profiles', label: 'Profile Editor', icon: User2 },
+    { id: 'profiles', label: 'My Profile', icon: User2 },
     { id: 'feedback', label: 'Nexus Inbox', icon: Inbox },
-    ...(profile?.role === 'admin' ? [
+    ...(['admin', 'principal', 'vice_principal', 'hod'].includes(profile?.role) ? [
       { id: 'users', label: 'User Creator', icon: UserPlus },
       { id: 'subjects', label: 'Subject Manager', icon: BookMarked },
-      { id: 'curriculum', label: 'Curriculum', icon: Layers },
-      { id: 'roles', label: 'Role Manager', icon: KeyRound }
+      { id: 'roles', label: 'Role Manager', icon: ShieldCheck },
+      { id: 'curriculum', label: 'Curriculum Manager', icon: Layers },
     ] : []),
   ]
   // Students see a feedback submit tab instead of admin tabs
-  if (profile?.role === 'student') {
-    return <StudentFeedback profile={profile} />
-  }
+  // No more hard redirect. Students get a focused Management Suite.
 
   return (
     <div className="space-y-6">
@@ -39,12 +37,17 @@ export default function ManagementSuite({ profile, prefill, onPrefillClear }) {
         <div className="flex bg-gray-100 p-1 rounded-2xl border border-gray-200 shadow-inner">
           {[
             { id: 'register', label: 'Attendance', icon: ToggleRight },
+            { id: 'profiles', label: 'Profile', icon: User2 },
             { id: 'users', label: 'Accounts', icon: Users },
             { id: 'roles', label: 'Roles', icon: KeyRound },
             { id: 'curriculum', label: 'Syllabus', icon: Layers },
             { id: 'subjects', label: 'Subjects', icon: BookOpen },
             { id: 'feedback', label: 'Feedback', icon: MessageSquare },
-          ].map(t => (
+          ].filter(t => {
+            if (profile?.role === 'student') return ['profiles', 'feedback'].includes(t.id)
+            if (['faculty', 'class_teacher'].includes(profile?.role)) return ['register', 'profiles', 'feedback'].includes(t.id)
+            return true
+          }).map(t => (
             <button
               key={t.id}
               onClick={() => setActiveTab(t.id)}
@@ -72,8 +75,8 @@ export default function ManagementSuite({ profile, prefill, onPrefillClear }) {
 
       <div className="bg-white rounded-[2.5rem] p-4 lg:p-8 shadow-2xl shadow-[#272A6F]/5 border border-gray-100">
         {activeTab === 'register' && <DigitalRegister profile={profile} prefill={prefill} onPrefillClear={onPrefillClear} setDatabaseSyncError={setDatabaseSyncError} />}
-        {activeTab === 'profiles' && <ProfileEditor profile={profile} />}
-        {activeTab === 'feedback' && <FeedbackInbox profile={profile} />}
+        {activeTab === 'profiles' && <ProfileEditor profile={profile} isAdmin={['admin', 'principal', 'hod', 'faculty', 'class_teacher', 'vice_principal'].includes(profile?.role)} />}
+        {activeTab === 'feedback' && (profile?.role === 'student' ? <StudentFeedback profile={profile} /> : <FeedbackInbox profile={profile} />)}
         {activeTab === 'users' && <AdminUserCreator profile={profile} setDatabaseSyncError={setDatabaseSyncError} />}
         {activeTab === 'subjects' && <SubjectManager profile={profile} setDatabaseSyncError={setDatabaseSyncError} />}
         {activeTab === 'roles' && <RoleManager profile={profile} setDatabaseSyncError={setDatabaseSyncError} />}
@@ -103,9 +106,19 @@ function DigitalRegister({ profile, prefill, onPrefillClear, setDatabaseSyncErro
       const localOnPrefillClear = (typeof onPrefillClear === 'function') ? onPrefillClear : () => { };
 
       try {
+        let stuQuery = supabase.from('students').select('id,full_name,pin_number,section,branch').order('pin_number', { ascending: true })
+        let subQuery = supabase.from('subjects').select('*')
+
+        // 🛡️ Faculty Isolation: Only see assigned subjects
+        if (profile?.role === 'faculty' || profile?.role === 'class_teacher') {
+          subQuery = subQuery.eq('faculty_id', profile.id)
+        } else if (profile?.role === 'hod') {
+          subQuery = subQuery.eq('branch', profile.branch)
+        }
+
         const [{ data: stu, error: stuErr }, { data: sub, error: subErr }] = await Promise.all([
-          supabase.from('students').select('id,full_name,pin_number,section,branch').order('pin_number', { ascending: true }),
-          supabase.from('subjects').select('*')
+          stuQuery,
+          subQuery
         ])
 
         if (stuErr || subErr) throw (stuErr || subErr)
@@ -146,6 +159,12 @@ function DigitalRegister({ profile, prefill, onPrefillClear, setDatabaseSyncErro
   }
 
   async function save() {
+    if (!topic.trim()) {
+      alert("Lesson Topic is mandatory. Please enter what you taught today."); return;
+    }
+    if (!subject) {
+      alert("Please select a subject."); return;
+    }
     setSaving(true); setSaved(false)
     const rows = Object.entries(marks).map(([student_id, status]) => ({
       student_id, subject_id: subject, status,
@@ -196,6 +215,7 @@ function DigitalRegister({ profile, prefill, onPrefillClear, setDatabaseSyncErro
             className="border bg-white border-gray-200 rounded-xl px-4 py-2 text-sm focus:ring-2 focus:ring-[#272A6F] outline-none" />
           <select value={subject} onChange={e => setSubject(e.target.value)}
             className="border bg-white border-gray-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#272A6F]">
+            {subjects.length === 0 && <option value="">No subjects assigned</option>}
             {subjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
           </select>
           <select value={section} onChange={e => setSection(e.target.value)}
@@ -259,62 +279,141 @@ function DigitalRegister({ profile, prefill, onPrefillClear, setDatabaseSyncErro
 }
 
 /* ── Profile Editor ───────────────────────────────── */
-function ProfileEditor({ profile }) {
+function ProfileEditor({ profile, isAdmin }) {
   const [students, setStudents] = useState([])
-  const [selected, setSelected] = useState(null)
-  const [mobile, setMobile] = useState('')
+  const [search, setSearch] = useState('')
+  const [selected, setSelected] = useState(isAdmin ? null : profile)
+  const [formData, setFormData] = useState({ 
+    full_name: selected?.full_name || '', 
+    mobile: selected?.mobile || '', 
+    email: selected?.email || '' 
+  })
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
 
   useEffect(() => {
-    supabase.from('profiles').select('*').eq('role', 'student').then(({ data }) => setStudents(data || []))
-  }, [])
+    if (isAdmin) {
+      supabase.from('profiles').select('*').eq('role', 'student')
+        .order('full_name', { ascending: true })
+        .then(({ data }) => setStudents(data || []))
+    }
+  }, [isAdmin])
 
-  function selectStudent(s) {
-    setSelected(s); setMobile(s.mobile || '');
-  }
+  useEffect(() => {
+    if (selected) {
+      setFormData({
+        full_name: selected.full_name || '',
+        mobile: selected.mobile || '',
+        email: selected.email || ''
+      })
+    }
+  }, [selected])
 
   async function saveProfile() {
     if (!selected) return
     setSaving(true)
-    await supabase.from('profiles').update({ mobile }).eq('id', selected.id)
-    setSaving(false); setSaved(true)
-    setTimeout(() => setSaved(false), 2000)
+    const { error } = await supabase.from('profiles').update({
+      full_name: formData.full_name,
+      mobile: formData.mobile,
+      email: formData.email
+    }).eq('id', selected.id)
+
+    if (error) alert("Update failed: " + error.message)
+    else {
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2000)
+    }
+    setSaving(false)
   }
 
+  const filtered = students.filter(s => 
+    s.full_name?.toLowerCase().includes(search.toLowerCase()) || 
+    s.pin_number?.toLowerCase().includes(search.toLowerCase())
+  )
+
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-      <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
-        {students.map(s => (
-          <button key={s.id} onClick={() => selectStudent(s)}
-            className={`w-full text-left p-3 rounded-xl border transition-all ${selected?.id === s.id ? 'bg-[#272A6F] text-white border-[#272A6F]' : 'bg-gray-50 hover:bg-gray-100 text-gray-700 border-gray-200'}`}>
-            <p className="font-bold text-sm">{s.full_name}</p>
-            <p className={`text-xs font-mono ${selected?.id === s.id ? 'text-white/60' : 'text-gray-400'}`}>{s.pin_number}</p>
-          </button>
-        ))}
-      </div>
-      {selected ? (
-        <div className="space-y-4">
-          <h4 className="font-bold text-[#272A6F]">Edit: {selected.full_name}</h4>
-          <div>
-            <label className="block text-xs text-gray-500 mb-1">Mobile Number</label>
-            <div className="flex items-center space-x-2">
-              <Phone size={16} className="text-gray-400" />
-              <input type="tel" value={mobile} onChange={e => setMobile(e.target.value)} maxLength={10}
-                className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#272A6F]" />
-            </div>
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      {isAdmin && (
+        <div className="lg:col-span-1 space-y-4">
+          <p className="text-[10px] font-black uppercase text-gray-400">Select Student</p>
+          <div className="relative">
+            <Users size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search students..."
+              className="w-full h-10 pl-9 pr-4 bg-gray-50 border border-gray-100 rounded-xl text-xs font-bold focus:ring-2 focus:ring-[#272A6F] outline-none" />
           </div>
-          <button onClick={saveProfile} disabled={saving}
-            className="w-full flex items-center justify-center space-x-2 bg-[#272A6F] text-white py-2.5 rounded-xl font-bold text-sm hover:shadow-lg transition-all">
-            {saving ? <Loader2 className="animate-spin" size={16} /> : saved ? <CheckCircle2 size={16} /> : <Save size={16} />}
-            <span>{saved ? 'Saved!' : 'Save Changes'}</span>
-          </button>
-        </div>
-      ) : (
-        <div className="flex items-center justify-center text-gray-300">
-          <p>Select a student to edit</p>
+          <div className="space-y-2 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
+            {filtered.map(s => (
+              <button key={s.id} onClick={() => setSelected(s)}
+                className={`w-full text-left p-4 rounded-2xl border transition-all ${selected?.id === s.id ? 'bg-[#272A6F] text-white border-[#272A6F] shadow-lg scale-[1.02]' : 'bg-gray-50 hover:bg-gray-100 text-gray-700 border-gray-100'}`}>
+                <p className="font-bold text-sm leading-tight">{s.full_name}</p>
+                <p className={`text-[10px] font-mono mt-1 ${selected?.id === s.id ? 'text-white/60' : 'text-gray-400'}`}>{s.pin_number}</p>
+              </button>
+            ))}
+          </div>
         </div>
       )}
+
+      <div className={`${isAdmin ? 'lg:col-span-2' : 'col-span-full'} space-y-6 pt-6 lg:pt-0`}>
+        {selected ? (
+          <div className="glass rounded-[2.5rem] p-8 border-2 border-dashed border-[#272A6F]/10">
+            <div className="flex items-center space-x-6 mb-8 pb-8 border-b border-gray-100">
+              <div className="w-20 h-20 bg-[#272A6F] rounded-[2rem] flex items-center justify-center text-white text-3xl font-black shadow-xl">
+                {formData.full_name?.[0] || '?'}
+              </div>
+              <div>
+                <h3 className="text-2xl font-black text-[#272A6F]">{formData.full_name}</h3>
+                <p className="text-gray-400 font-bold uppercase tracking-widest text-[10px]">{selected.role} • {selected.pin_number || 'STAFF'}</p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+              <div className="space-y-2">
+                <label className="flex items-center space-x-2 text-[10px] font-black uppercase text-gray-400 tracking-widest">
+                  <User2 size={12} /><span>Full Name</span>
+                </label>
+                <input value={formData.full_name} onChange={e => setFormData({ ...formData, full_name: e.target.value })}
+                  className="w-full h-11 bg-white border-2 border-gray-50 rounded-xl px-4 text-sm font-bold focus:border-[#272A6F] outline-none transition-all" />
+              </div>
+
+              <div className="space-y-2">
+                <label className="flex items-center space-x-2 text-[10px] font-black uppercase text-gray-400 tracking-widest">
+                  <Mail size={12} /><span>Email Address</span>
+                </label>
+                <input value={formData.email} onChange={e => setFormData({ ...formData, email: e.target.value })}
+                  className="w-full h-11 bg-white border-2 border-gray-50 rounded-xl px-4 text-sm font-bold focus:border-[#272A6F] outline-none transition-all" />
+              </div>
+
+              <div className="space-y-2">
+                <label className="flex items-center space-x-2 text-[10px] font-black uppercase text-gray-400 tracking-widest">
+                  <Phone size={12} /><span>Mobile Number</span>
+                </label>
+                <input value={formData.mobile} onChange={e => setFormData({ ...formData, mobile: e.target.value })} maxLength={10}
+                  placeholder="e.g. 9876543210"
+                  className="w-full h-11 bg-white border-2 border-gray-50 rounded-xl px-4 text-sm font-bold focus:border-[#272A6F] outline-none transition-all" />
+              </div>
+
+              <div className="space-y-2 opacity-50 cursor-not-allowed">
+                <label className="flex items-center space-x-2 text-[10px] font-black uppercase text-gray-400 tracking-widest">
+                  <Lock size={12} /><span>PIN Number</span>
+                </label>
+                <input disabled value={selected.pin_number || 'N/A'}
+                  className="w-full h-11 bg-gray-100 border-2 border-gray-100 rounded-xl px-4 text-sm font-bold outline-none" />
+              </div>
+            </div>
+
+            <button onClick={saveProfile} disabled={saving}
+              className="w-full h-14 flex items-center justify-center space-x-3 bg-[#272A6F] text-white rounded-2xl font-black text-sm hover:shadow-2xl hover:-translate-y-1 transition-all active:scale-95 disabled:opacity-50">
+              {saving ? <Loader2 className="animate-spin" size={20} /> : saved ? <BadgeCheck size={20} /> : <Save size={20} />}
+              <span>{saved ? 'Profile Updated Successfully!' : 'Commit Changes to Nexus'}</span>
+            </button>
+          </div>
+        ) : (
+          <div className="flex flex-col items-center justify-center py-20 bg-gray-50 rounded-[2.5rem] border-2 border-dashed border-gray-100">
+            <User2 size={48} className="text-gray-200 mb-4" />
+            <p className="text-gray-400 font-bold">Select a student profile from the left directory to begin maintenance.</p>
+          </div>
+        )}
+      </div>
     </div>
   )
 }
@@ -523,12 +622,15 @@ function AdminUserCreator({ profile, setDatabaseSyncError }) {
   async function fetchUsers() {
     setLoading(true)
     try {
-      // Primary attempt: fetch all columns including email and section
-      const { data, error: fetchErr } = await supabase
+      let query = supabase
         .from('profiles')
         .select('id,full_name,email,role,pin_number,branch,section')
         .order('created_at', { ascending: false })
         .limit(80)
+
+      if (profile?.role === 'hod') query = query.eq('branch', profile.branch)
+      
+      const { data, error: fetchErr } = await query
 
       if (fetchErr) throw fetchErr
       setUsers(data || [])
@@ -788,8 +890,11 @@ function SubjectManager({ profile, setDatabaseSyncError }) {
   async function fetchData() {
     setLoading(true)
     try {
+      let subQuery = supabase.from('subjects').select('*, profiles(full_name)').order('branch', { ascending: true })
+      if (profile?.role === 'hod') subQuery = subQuery.eq('branch', profile.branch)
+
       const [{ data: sub, error: subErr }, { data: fac, error: facErr }] = await Promise.all([
-        supabase.from('subjects').select('*, profiles(full_name)').order('branch', { ascending: true }),
+        subQuery,
         supabase.from('profiles').select('id, full_name').eq('role', 'faculty')
       ])
 
@@ -1085,7 +1190,10 @@ function CurriculumManager({ profile, setDatabaseSyncError }) {
   }, [selectedSub])
 
   async function fetchData() {
-    const { data, error } = await supabase.from('subjects').select('*').order('name')
+    let query = supabase.from('subjects').select('*').order('name')
+    if (profile?.role === 'hod') query = query.eq('branch', profile.branch)
+    
+    const { data, error } = await query
     if (error) setDatabaseSyncError(error.message)
     else {
       setSubjects(data || [])

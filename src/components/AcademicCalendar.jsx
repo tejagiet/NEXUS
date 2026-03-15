@@ -9,7 +9,7 @@ export default function AcademicCalendar({ profile }) {
   const [showAdd, setShowAdd] = useState(false)
   const [newEntry, setNewEntry] = useState({ date: '', title: '', type: 'holiday', description: '' })
   
-  const isAdmin = ['admin', 'principal'].includes(profile?.role)
+  const isAdmin = ['admin', 'principal', 'hod', 'vice_principal'].includes(profile?.role)
 
   useEffect(() => {
     fetchEvents()

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
-import { Upload, Download, FileText, Film, Loader2, Trash2, FolderOpen, BookOpen, AlertCircle, BarChart2 } from 'lucide-react'
+import { Upload, Download, FileText, Film, Loader2, Trash2, FolderOpen, BookOpen, AlertCircle, BarChart2, ClipboardList, Layers } from 'lucide-react'
 
 const BRANCHES = ['CME', 'ECE', 'EEE', 'ME', 'CIVIL', 'AI', 'ALL']
 const FILE_ICONS = { pdf: FileText, mp4: Film, mkv: Film, avi: Film, pptx: FileText, docx: FileText }
@@ -11,6 +11,7 @@ export default function LMSPortal({ profile }) {
   const [files, setFiles] = useState([])
   const [assignments, setAssignments] = useState([])
   const [attendanceData, setAttendanceData] = useState([])
+  const [curriculum, setCurriculum] = useState([])
   const [loading, setLoading] = useState(true)
   const [uploading, setUploading] = useState(false)
   const [filter, setFilter] = useState(profile?.role === 'student' ? (profile?.branch || 'CME') : 'ALL')
@@ -28,6 +29,7 @@ export default function LMSPortal({ profile }) {
   useEffect(() => { if (tab === 'results') fetchResultFiles() }, [tab, semFilter])
   useEffect(() => { if (tab === 'assignments') fetchAssignments() }, [tab])
   useEffect(() => { if (tab === 'attendance') fetchAttendanceStats() }, [tab])
+  useEffect(() => { if (tab === 'syllabus') fetchCurriculum() }, [tab, filter])
 
   async function fetchFiles() {
     setLoading(true)
@@ -65,6 +67,15 @@ export default function LMSPortal({ profile }) {
     setLoading(false)
   }
 
+  async function fetchCurriculum() {
+    setLoading(true)
+    let query = supabase.from('curriculum').select('*, subjects(name, code, branch)')
+    if (filter !== 'ALL') query = query.filter('subjects.branch', 'eq', filter)
+    const { data, error } = await query
+    if (!error) setCurriculum(data || [])
+    setLoading(false)
+  }
+
   async function handleUpload(e) {
     const file = e.target.files?.[0]
     if (!file) return
@@ -98,7 +109,7 @@ export default function LMSPortal({ profile }) {
     fetchFiles()
   }
 
-  const isFaculty = profile?.role === 'faculty' || profile?.role === 'admin'
+  const isFaculty = ['admin', 'principal', 'hod', 'faculty', 'class_teacher', 'vice_principal'].includes(profile?.role)
   const isStaff = ['admin', 'principal', 'hod', 'faculty', 'class_teacher', 'vice_principal'].includes(profile?.role)
 
   return (
@@ -111,7 +122,8 @@ export default function LMSPortal({ profile }) {
         {/* Tab Switcher */}
         <div className="flex bg-gray-100 rounded-2xl p-1 gap-1 overflow-x-auto">
           {[
-            { id: 'resources', label: 'Resources', icon: BookOpen },
+             { id: 'resources', label: 'Resources', icon: BookOpen },
+            { id: 'syllabus', label: 'Syllabus', icon: Layers },
             { id: 'assignments', label: 'Tasks', icon: ClipboardList },
             { id: 'attendance', label: 'Attendance', icon: BarChart2 },
             { id: 'results', label: 'Class Results', icon: BarChart2 },
@@ -214,6 +226,44 @@ export default function LMSPortal({ profile }) {
             </div>
           )}
         </>
+      )}
+
+       {/* ── SYLLABUS TAB ─────────────────────────────────────────── */}
+      {tab === 'syllabus' && (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {(() => {
+            const grouped = curriculum.reduce((acc, curr) => {
+              const sub = curr.subjects?.name || 'Other'
+              if (!acc[sub]) acc[sub] = { code: curr.subjects?.code, topics: [] }
+              acc[sub].topics.push(curr)
+              return acc
+            }, {})
+
+            if (Object.keys(grouped).length === 0) return (
+              <div className="col-span-full py-20 text-center bg-gray-50 rounded-3xl border-2 border-dashed border-gray-200">
+                <p className="text-gray-400 font-bold">No syllabus data found for {filter}.</p>
+              </div>
+            )
+
+            return Object.entries(grouped).map(([name, s]) => (
+              <div key={name} className="bg-white rounded-[2.5rem] p-6 border border-gray-100 shadow-xl shadow-[#272A6F]/5">
+                <div className="flex justify-between items-start mb-4">
+                  <span className="text-[10px] font-black bg-[#272A6F]/5 text-[#272A6F] px-3 py-1 rounded-full">{s.code}</span>
+                  <span className="text-[10px] font-bold text-gray-400">{s.topics.filter(t => t.is_completed).length}/{s.topics.length} Covered</span>
+                </div>
+                <h4 className="font-black text-[#272A6F] mb-4">{name}</h4>
+                <div className="space-y-2">
+                  {s.topics.map(t => (
+                    <div key={t.id} className="flex items-center space-x-2 text-xs">
+                      <div className={`w-1.5 h-1.5 rounded-full ${t.is_completed ? 'bg-emerald-400' : 'bg-gray-200'}`} />
+                      <span className={t.is_completed ? 'text-gray-400 line-through' : 'text-gray-600 font-bold'}>{t.title}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))
+          })()}
+        </div>
       )}
 
       {/* ── ASSIGNMENTS TAB ─────────────────────────────────────── */}
