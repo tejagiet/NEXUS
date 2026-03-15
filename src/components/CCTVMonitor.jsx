@@ -7,7 +7,7 @@ import {
 import { motion, AnimatePresence } from 'framer-motion'
 
 // 🏗️ Sub-Component: Smart Surveillance Player
-function SurveillanceNode({ stream, motionActive, onFullscreen, hlsLoaded }) {
+function SurveillanceNode({ stream, motionActive, onFullscreen, onShowGuide, hlsLoaded }) {
   const videoRef = useRef(null)
   const [hasError, setHasError] = useState(false)
   const [nightVision, setNightVision] = useState(false)
@@ -117,7 +117,7 @@ function SurveillanceNode({ stream, motionActive, onFullscreen, hlsLoaded }) {
                   Direct Link
                 </a>
                 <button 
-                  onClick={() => onFullscreen({ ...stream, showGuide: true })}
+                  onClick={() => onShowGuide(true)}
                   className="px-4 py-2 bg-[#EFBE33] text-[#272A6F] rounded-xl transition-all font-black text-[9px] uppercase tracking-widest"
                 >
                   How to Fix →
@@ -497,6 +497,7 @@ export default function CCTVMonitor({ profile }) {
                     stream={activeStreams[0]} 
                     motionActive={motionActive} 
                     onFullscreen={setFullscreenStream}
+                    onShowGuide={setShowCompatibilityInfo}
                     hlsLoaded={hlsLoaded}
                   />
                 </div>
@@ -509,6 +510,7 @@ export default function CCTVMonitor({ profile }) {
                     stream={{...stream, url: getStreamUrl(stream.url)}} 
                     motionActive={motionActive} 
                     onFullscreen={setFullscreenStream}
+                    onShowGuide={setShowCompatibilityInfo}
                     hlsLoaded={hlsLoaded}
                   />
                 ))}
@@ -553,6 +555,7 @@ export default function CCTVMonitor({ profile }) {
                 stream={fullscreenStream} 
                 motionActive={motionActive} 
                 onFullscreen={() => setFullscreenStream(null)}
+                onShowGuide={setShowCompatibilityInfo}
                 hlsLoaded={hlsLoaded}
               />
               <div className="mt-8 flex items-center justify-between text-white/40 font-mono text-[10px] uppercase tracking-[0.5em] px-10">
