@@ -16,7 +16,7 @@ import SmartTimetable from './components/SmartTimetable'
 import BatchFees from './components/BatchFees'
 import {
   LayoutDashboard, LogOut, User, ClipboardList, Wallet, Camera,
-  GraduationCap, BookOpen, ShieldCheck, Settings, Menu, X, MessageSquare, Calendar
+  GraduationCap, BookOpen, ShieldCheck, Settings, Menu, X, MessageSquare, Calendar, Layers
 } from 'lucide-react'
 
 const MENU = {
