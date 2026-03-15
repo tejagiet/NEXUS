@@ -26,10 +26,12 @@ export default function ManagementSuite({ profile, prefill, onPrefillClear }) {
   }, [prefill])
 
   useEffect(() => {
-    // 🏛️ Multi-Role Tab Initialization
+    // 🏛️ Multi-Role Tab Initialization & Permission Sync
     const userRoles = profile?.roles || [profile?.role] || ['student']
+    const currentTab = TABS.find(t => t.id === activeTab)
+    const isAllowed = currentTab?.roles.some(r => userRoles.includes(r))
     
-    if (!activeTab || !TABS.find(t => t.id === activeTab)) {
+    if (!activeTab || !currentTab || !isAllowed) {
       const allowed = TABS.filter(t => t.roles.some(r => userRoles.includes(r)))
       if (allowed.length > 0) setActiveTab(allowed[0].id)
     }
@@ -38,7 +40,7 @@ export default function ManagementSuite({ profile, prefill, onPrefillClear }) {
   // Students see a feedback submit tab instead of admin tabs
   // No more hard redirect. Students get a focused Management Suite.
 
-  const isStudent = profile?.role === 'student'
+  const isStudent = (profile?.roles || [profile?.role]).includes('student')
 
   return (
     <div className="space-y-6">
@@ -81,9 +83,9 @@ export default function ManagementSuite({ profile, prefill, onPrefillClear }) {
       <div className="bg-white rounded-[2.5rem] p-4 lg:p-8 shadow-2xl shadow-[#272A6F]/5 border border-gray-100">
         {(() => {
           switch (activeTab) {
-            case 'users': return <AdminUserCreator setDatabaseSyncError={setDatabaseSyncError} />
+            case 'users': return <AdminUserCreator profile={profile} setDatabaseSyncError={setDatabaseSyncError} />
             case 'subjects': return <SubjectManager profile={profile} setDatabaseSyncError={setDatabaseSyncError} />
-            case 'roles': return <RoleManager setDatabaseSyncError={setDatabaseSyncError} />
+            case 'roles': return <RoleManager profile={profile} setDatabaseSyncError={setDatabaseSyncError} />
             case 'curriculum': return <CurriculumManager profile={profile} setDatabaseSyncError={setDatabaseSyncError} />
             case 'profiles': return <ProfileEditor profile={profile} setDatabaseSyncError={setDatabaseSyncError} />
             case 'feedback': return isStudent ? <StudentFeedback profile={profile} /> : <FeedbackInbox profile={profile} />
@@ -252,7 +254,9 @@ function ProfileEditor({ profile }) {
               <div className="text-center md:text-left flex-1 py-2">
                 <h3 className="text-3xl font-black text-[#272A6F]">{formData.full_name || 'Incomplete Profile'}</h3>
                 <p className="text-gray-400 font-bold uppercase tracking-[0.2em] text-[10px] mt-2 flex items-center justify-center md:justify-start">
-                  <span className="bg-[#272A6F]/10 text-[#272A6F] px-3 py-1 rounded-lg mr-2">{selected.role}</span>
+                  <span className="bg-[#272A6F]/10 text-[#272A6F] px-3 py-1 rounded-lg mr-2">
+                    {(selected.roles || [selected.role]).filter(Boolean).map(r => r.replace('_', ' ')).join(' & ') || 'Student'}
+                  </span>
                   {selected.pin_number || 'STAFF ACCOUNT'}
                 </p>
               </div>
@@ -537,7 +541,7 @@ function AdminUserCreator({ profile, setDatabaseSyncError }) {
         .order('created_at', { ascending: false })
         .limit(80)
 
-      if (profile?.role === 'hod') query = query.eq('branch', profile.branch)
+      if ((profile?.roles || [profile?.role]).includes('hod')) query = query.eq('branch', profile.branch)
       
       const { data, error: fetchErr } = await query
 
@@ -593,7 +597,7 @@ function AdminUserCreator({ profile, setDatabaseSyncError }) {
         }, { onConflict: 'id' })
 
         // 🔗 NEW: Sync to students table for attendance tracking
-        if (form.role === 'student') {
+        if (form.roles.includes('student')) {
           await supabase.from('students').upsert({
             full_name: form.full_name.trim(),
             pin_number: form.pin_number.trim(),
@@ -800,7 +804,7 @@ function SubjectManager({ profile, setDatabaseSyncError }) {
     setLoading(true)
     try {
       let subQuery = supabase.from('subjects').select('*, profiles(full_name)').order('branch', { ascending: true })
-      if (profile?.role === 'hod') subQuery = subQuery.eq('branch', profile.branch)
+      if ((profile?.roles || [profile?.role]).includes('hod')) subQuery = subQuery.eq('branch', profile.branch)
 
       const [{ data: sub, error: subErr }, { data: fac, error: facErr }] = await Promise.all([
         subQuery,
@@ -1209,7 +1213,7 @@ function CurriculumManager({ profile, setDatabaseSyncError }) {
 
   async function fetchData() {
     let query = supabase.from('subjects').select('*').order('name')
-    if (profile?.role === 'hod') query = query.eq('branch', profile.branch)
+    if ((profile?.roles || [profile?.role]).includes('hod')) query = query.eq('branch', profile.branch)
     
     const { data, error } = await query
     if (error) setDatabaseSyncError(error.message)
