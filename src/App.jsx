@@ -19,7 +19,7 @@ import NoticeBoard from './components/NoticeBoard'
 import CommunityHub from './components/CommunityHub'
 import {
   LayoutDashboard, LogOut, User, ClipboardList, Wallet, Camera,
-  GraduationCap, BookOpen, ShieldCheck, Settings, Menu, X, MessageSquare, Calendar, Layers, Megaphone
+  GraduationCap, BookOpen, ShieldCheck, Settings, Menu, X, MessageSquare, Calendar, Layers, Megaphone, Users
 } from 'lucide-react'
 
 const MENU = {

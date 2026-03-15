@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
-import { MessageSquare, Users, Send, Loader2, Hash, Shield, Info, Star, Trash2 } from 'lucide-react'
+import { MessageSquare, Users, Send, Loader2, Hash, Shield, Info, Star, Trash2, Plus } from 'lucide-react'
 
 export default function CommunityHub({ profile }) {
   const [tab, setTab] = useState('chat') // 'chat' | 'clubs' | 'events'
