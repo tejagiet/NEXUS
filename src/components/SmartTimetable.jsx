@@ -42,7 +42,7 @@ export default function SmartTimetable({ profile, onMarkAttendance }) {
       .subscribe()
 
     return () => { supabase.removeChannel(channel) }
-  }, [branch, semester, section, viewMode])
+  }, [branch, semester, section, viewMode]);
 
   async function fetchData() {
     setLoading(true)

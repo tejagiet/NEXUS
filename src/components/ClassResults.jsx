@@ -39,6 +39,7 @@ export default function ClassResults({ profile }) {
   const [expanded,   setExpanded]   = useState(null)
   const [uploading,  setUploading]  = useState(false)
   const [uploadLog,  setUploadLog]  = useState([])
+  const [viewMode,   setViewMode]   = useState('cards') // 'cards' | 'matrix'
   const abortRef = useRef(false)
 
   async function fetchAll() {
@@ -429,59 +430,136 @@ export default function ClassResults({ profile }) {
       {/* Tables Section */}
       {results.length > 0 && (
         <div className="space-y-12">
-          {/* Failed Section */}
-          {sortedFailed.length > 0 && (
-            <div className="glass rounded-[32px] overflow-hidden shadow-2xl border-white/50 border-t-red-500 border-t-8">
-              <div className="px-8 py-6 bg-red-50/50 flex items-center justify-between border-b border-red-100">
-                <div className="flex items-center space-x-3">
-                  <div className="w-10 h-10 bg-red-500 rounded-xl flex items-center justify-center text-white shadow-lg">
-                    <AlertCircle size={20} />
-                  </div>
-                  <div>
-                    <h3 className="text-xl font-black text-red-700">Candidates with Backlogs</h3>
-                    <p className="text-xs text-red-600 font-bold uppercase tracking-widest mt-0.5">Focus Group for Remedial Sessions</p>
-                  </div>
-                </div>
-                <span className="bg-red-500 text-white px-4 py-1.5 rounded-full text-xs font-black shadow-lg">
-                  {sortedFailed.length} STUDENTS
-                </span>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <TableHeader />
-                  <tbody className="divide-y divide-gray-100">
-                    {sortedFailed.map(Row)}
-                  </tbody>
-                </table>
+          <div className="flex items-center justify-between mb-4 px-2">
+            <h3 className="text-xl font-black text-[#272A6F] flex items-center space-x-2">
+              <Layers size={20} className="text-[#EFBE33]" />
+              <span>Result Analytics</span>
+            </h3>
+            <div className="flex bg-gray-100 p-1 rounded-xl border border-gray-200">
+               <button onClick={() => setViewMode('cards')} 
+                 className={`px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all ${viewMode === 'cards' ? 'bg-white text-[#272A6F] shadow-sm' : 'text-gray-400'}`}>
+                 Individual Cards
+               </button>
+               <button onClick={() => setViewMode('matrix')} 
+                 className={`px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all ${viewMode === 'matrix' ? 'bg-white text-[#272A6F] shadow-sm' : 'text-gray-400'}`}>
+                 Merged Matrix
+               </button>
+            </div>
+          </div>
+
+          {viewMode === 'matrix' ? (
+            <div className="glass rounded-[32px] overflow-hidden shadow-2xl border-white/50 border-t-[#272A6F] border-t-8 overflow-x-auto">
+              <table className="w-full text-xs text-left">
+                <thead className="bg-[#272A6F] text-white">
+                  <tr className="uppercase tracking-widest font-black text-[9px]">
+                    <th className="px-6 py-5 sticky left-0 bg-[#272A6F] z-10 w-48">Cadet Details</th>
+                    {Array.from(new Set(results.flatMap(r => r.subjects.map(s => s.code)))).sort().map(code => (
+                      <th key={code} className="px-4 py-5 text-center border-l border-white/10">{code}</th>
+                    ))}
+                    <th className="px-6 py-5 text-center border-l border-white/10">GPA</th>
+                    <th className="px-6 py-5 text-center border-l border-white/10">Result</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100 font-bold">
+                  {getSortedList([...sortedPassed, ...sortedFailed]).map((r, i) => {
+                    const subMap = Object.fromEntries(r.subjects.map(s => [s.code, s]))
+                    const codes = Array.from(new Set(results.flatMap(res => res.subjects.map(s => s.code)))).sort()
+                    return (
+                      <tr key={r.pin} className={`group ${r.result !== 'PASS' ? 'bg-red-50/30' : 'hover:bg-gray-50'}`}>
+                        <td className="px-6 py-4 sticky left-0 bg-white group-hover:bg-gray-50 z-10 border-r border-gray-100 min-w-[200px]">
+                          <p className="text-[#272A6F] font-black">{r.name}</p>
+                          <p className="text-[9px] font-mono text-gray-400 mt-0.5">{r.pin}</p>
+                        </td>
+                        {codes.map(code => {
+                          const sub = subMap[code]
+                          return (
+                            <td key={code} className="px-4 py-4 text-center border-l border-gray-50">
+                              {sub ? (
+                                <div className="space-y-0.5">
+                                  <p className={`text-sm ${sub.result === 'PASS' ? 'text-[#272A6F]' : 'text-red-500 font-black'}`}>{sub.total}</p>
+                                  <p className="text-[8px] text-gray-400 opacity-60 font-mono">{sub.external}+{sub.internal}</p>
+                                </div>
+                              ) : (
+                                <span className="text-gray-200">—</span>
+                              )}
+                            </td>
+                          )
+                        })}
+                        <td className="px-6 py-4 text-center border-l border-gray-100 bg-gray-50/50">
+                          <span className={`text-sm font-black ${r.gpa >= 8 ? 'text-green-600' : 'text-[#272A6F]'}`}>{r.gpa || '0'}</span>
+                        </td>
+                        <td className="px-6 py-4 text-center border-l border-gray-100 bg-gray-50/50">
+                           <span className={`px-2 py-0.5 rounded-full text-[8px] font-black ${r.result === 'PASS' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                             {r.result}
+                           </span>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+              <div className="p-4 bg-gray-50 border-t border-gray-100 flex items-center justify-between">
+                 <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Vertical labels: Ext+Int marks • Horizontal labels: Subject Codes</p>
+                 <p className="text-[9px] font-black text-[#272A6F] uppercase tracking-widest">Dataset: {results.length} Students</p>
               </div>
             </div>
-          )}
-
-          {/* Passed Section */}
-          {sortedPassed.length > 0 && (
-            <div className="glass rounded-[32px] overflow-hidden shadow-2xl border-white/50 border-t-emerald-500 border-t-8">
-              <div className="px-8 py-6 bg-emerald-50/50 flex items-center justify-between border-b border-emerald-100">
-                <div className="flex items-center space-x-3">
-                  <div className="w-10 h-10 bg-emerald-500 rounded-xl flex items-center justify-center text-white shadow-lg">
-                    <Trophy size={20} />
+          ) : (
+            <div className="space-y-12">
+              {/* Failed Section */}
+              {sortedFailed.length > 0 && (
+                <div className="glass rounded-[32px] overflow-hidden shadow-2xl border-white/50 border-t-red-500 border-t-8">
+                  <div className="px-8 py-6 bg-red-50/50 flex items-center justify-between border-b border-red-100">
+                    <div className="flex items-center space-x-3">
+                      <div className="w-10 h-10 bg-red-500 rounded-xl flex items-center justify-center text-white shadow-lg">
+                        <AlertCircle size={20} />
+                      </div>
+                      <div>
+                        <h3 className="text-xl font-black text-red-700">Candidates with Backlogs</h3>
+                        <p className="text-xs text-red-600 font-bold uppercase tracking-widest mt-0.5">Focus Group for Remedial Sessions</p>
+                      </div>
+                    </div>
+                    <span className="bg-red-500 text-white px-4 py-1.5 rounded-full text-xs font-black shadow-lg">
+                      {sortedFailed.length} STUDENTS
+                    </span>
                   </div>
-                  <div>
-                    <h3 className="text-xl font-black text-emerald-700">Passed Successfully</h3>
-                    <p className="text-xs text-emerald-600 font-bold uppercase tracking-widest mt-0.5">Cleared Semester Exams</p>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <TableHeader />
+                      <tbody className="divide-y divide-gray-100">
+                        {sortedFailed.map(Row)}
+                      </tbody>
+                    </table>
                   </div>
                 </div>
-                <span className="bg-emerald-500 text-white px-4 py-1.5 rounded-full text-xs font-black shadow-lg">
-                  {sortedPassed.length} STUDENTS
-                </span>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <TableHeader />
-                  <tbody className="divide-y divide-gray-100">
-                    {sortedPassed.map(Row)}
-                  </tbody>
-                </table>
-              </div>
+              )}
+
+              {/* Passed Section */}
+              {sortedPassed.length > 0 && (
+                <div className="glass rounded-[32px] overflow-hidden shadow-2xl border-white/50 border-t-emerald-500 border-t-8">
+                  <div className="px-8 py-6 bg-emerald-50/50 flex items-center justify-between border-b border-emerald-100">
+                    <div className="flex items-center space-x-3">
+                      <div className="w-10 h-10 bg-emerald-500 rounded-xl flex items-center justify-center text-white shadow-lg">
+                        <Trophy size={20} />
+                      </div>
+                      <div>
+                        <h3 className="text-xl font-black text-emerald-700">Passed Successfully</h3>
+                        <p className="text-xs text-emerald-600 font-bold uppercase tracking-widest mt-0.5">Cleared Semester Exams</p>
+                      </div>
+                    </div>
+                    <span className="bg-emerald-500 text-white px-4 py-1.5 rounded-full text-xs font-black shadow-lg">
+                      {sortedPassed.length} STUDENTS
+                    </span>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <TableHeader />
+                      <tbody className="divide-y divide-gray-100">
+                        {sortedPassed.map(Row)}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>

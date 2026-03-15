@@ -6,15 +6,16 @@ import {
 } from 'recharts'
 import { TrendingUp, AlertCircle, CalendarCheck, BookOpen, Loader2, Zap } from 'lucide-react'
 
-export default function StudentDashboard({ profile }) {
+export default function StudentDashboard({ profile, setTab }) {
   const [attendance, setAttendance]  = useState([])
   const [loading,    setLoading]     = useState(true)
   const [pulse,      setPulse]       = useState(false)
+  const [schedule,   setSchedule]    = useState([])
+  const [feeStatus,  setFeeStatus]   = useState({ total: 0, paid: 0 })
 
   useEffect(() => {
-    fetchAttendance()
+    fetchDashboardData()
 
-    // Antigravity: Real-time listener — bar grows when faculty marks present
     const channel = supabase.channel('rt-attendance')
       .on('postgres_changes', {
         event: 'INSERT', schema: 'public', table: 'attendance',
@@ -22,39 +23,65 @@ export default function StudentDashboard({ profile }) {
       }, () => {
         setPulse(true)
         setTimeout(() => setPulse(false), 2000)
-        fetchAttendance()
+        fetchDashboardData()
       })
       .subscribe()
 
     return () => supabase.removeChannel(channel)
   }, [profile.id])
 
-  async function fetchAttendance() {
-    const { data } = await supabase
-      .from('attendance')
-      .select('status, subjects(name)')
-      .eq('student_id', profile.id)
+  async function fetchDashboardData() {
+    setLoading(true)
+    try {
+      const today = new Date().toLocaleDateString('en-US', { weekday: 'long' })
+      
+      const [attendRes, ttRes, profileRes] = await Promise.all([
+        supabase.from('attendance').select('status, subjects(name)').eq('student_id', profile.id),
+        supabase.from('timetable_slots').select('*, subjects(name, code)')
+          .eq('branch', profile.branch)
+          .eq('semester', 'Sem 4') // Default sem for now
+          .eq('section', profile.section)
+          .eq('day', today)
+          .order('slot', { ascending: true }),
+        supabase.from('profiles').select('academic_fee, transport_fee, academic_fee_paid, transport_fee_paid').eq('id', profile.id).single()
+      ])
 
-    if (data) {
-      const grouped = {}
-      data.forEach(r => {
-        const name = r.subjects?.name || 'Unknown'
-        if (!grouped[name]) grouped[name] = { name, present: 0, total: 0 }
-        grouped[name].total++
-        if (r.status === 'present') grouped[name].present++
-      })
-      setAttendance(Object.values(grouped).map(g => ({
-        ...g,
-        percentage: g.total ? Math.round((g.present / g.total) * 100) : 0
-      })))
+      // Attendance Processing
+      if (attendRes.data) {
+        const grouped = {}
+        attendRes.data.forEach(r => {
+          const name = r.subjects?.name || 'Unknown'
+          if (!grouped[name]) grouped[name] = { name, present: 0, total: 0 }
+          grouped[name].total++
+          if (r.status === 'present') grouped[name].present++
+        })
+        setAttendance(Object.values(grouped).map(g => ({
+          ...g,
+          percentage: g.total ? Math.round((g.present / g.total) * 100) : 0
+        })))
+      }
+
+      setSchedule(ttRes.data || [])
+      
+      if (profileRes.data) {
+        setFeeStatus({
+          total: (profileRes.data.academic_fee || 0) + (profileRes.data.transport_fee || 0),
+          paid: (profileRes.data.academic_fee_paid || 0) + (profileRes.data.transport_fee_paid || 0)
+        })
+      }
+
+    } catch (err) {
+      console.error("Dashboard Fetch Error:", err)
+    } finally {
+      setLoading(false)
     }
-    setLoading(false)
   }
 
   const overall = attendance.length
     ? Math.round(attendance.reduce((a, b) => a + b.percentage, 0) / attendance.length)
     : 0
   const shortage = attendance.filter(s => s.percentage < 75)
+  const balance = feeStatus.total - feeStatus.paid
 
   const CustomTooltip = ({ active, payload }) => {
     if (!active || !payload?.length) return null
@@ -75,7 +102,7 @@ export default function StudentDashboard({ profile }) {
   )
 
   return (
-    <div className={`space-y-8 transition-all duration-300 ${pulse ? 'scale-[1.005]' : ''}`}>
+    <div className={`space-y-8 animate-in fade-in duration-500 ${pulse ? 'scale-[1.002]' : ''}`}>
       {/* Real-time pulse banner */}
       {pulse && (
         <div className="flex items-center space-x-3 bg-[#EFBE33] text-[#272A6F] px-5 py-3 rounded-2xl font-bold animate-pulse shadow-lg shadow-[#EFBE33]/30">
@@ -86,70 +113,91 @@ export default function StudentDashboard({ profile }) {
 
       <header className="flex items-center justify-between">
         <div>
-          <h2 className="text-3xl font-black text-[#272A6F]">My Dashboard</h2>
-          <p className="text-gray-500 mt-1">Good evening, {profile.full_name?.split(' ')[0] || 'Cadet'}</p>
+          <h2 className="text-3xl font-black text-[#272A6F]">My Nexus</h2>
+          <p className="text-gray-500 mt-1 font-medium capitalize">Welcome back, {profile.full_name?.split(' ')[0]}</p>
         </div>
-        <span className="hidden md:block font-mono bg-[#272A6F]/10 text-[#272A6F] text-sm font-bold px-4 py-2 rounded-xl">
-          {profile.pin_number || 'PIN N/A'}
-        </span>
+        <div className="hidden md:flex flex-col items-end">
+          <span className="font-mono bg-[#272A6F]/10 text-[#272A6F] text-xs font-black px-4 py-2 rounded-xl">
+            {profile.pin_number || 'PIN N/A'}
+          </span>
+          <p className="text-[10px] font-black text-[#EFBE33] uppercase mt-2 tracking-widest">{profile.branch} Department</p>
+        </div>
       </header>
 
       {/* Stats Row */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <StatCard label="Overall Attendance" value={`${overall}%`} icon={TrendingUp}
+        <StatCard label="Live Attendance" value={`${overall}%`} icon={TrendingUp}
           alert={overall < 75} color="blue" />
-        <StatCard label="Subjects" value={attendance.length} icon={BookOpen} color="purple" />
-        <StatCard label="Classes Today" value="—" icon={CalendarCheck} color="gold" />
-        <StatCard label="Shortage Alert" value={shortage.length} icon={AlertCircle}
-          alert={shortage.length > 0} color="red" />
+        <StatCard label="Fee Balance" value={`₹${balance}`} icon={Wallet} 
+          alert={balance > 0} color="gold" />
+        <StatCard label="Classes Today" value={schedule.length} icon={CalendarCheck} color="purple" />
+        <StatCard label="Course Pulse" value={`${attendance.length} Subs`} icon={BookOpen} color="blue" />
       </div>
 
-      {/* Shortage Warning */}
-      {shortage.length > 0 && (
-        <div className="bg-red-50 border border-red-200 rounded-2xl p-4 flex items-start space-x-3">
-          <AlertCircle size={18} className="text-red-500 mt-0.5 flex-shrink-0" />
-          <div>
-            <p className="font-bold text-red-700 text-sm">Attendance Shortage Warning</p>
-            <p className="text-red-600 text-xs mt-1">
-              {shortage.map(s => `${s.name} (${s.percentage}%)`).join(' · ')} — below 75% threshold
-            </p>
-          </div>
-        </div>
-      )}
-
-      {/* Bar Chart */}
-      <div className="glass rounded-3xl p-6 md:p-8 shadow-xl">
-        <h3 className="font-bold text-[#272A6F] mb-6 flex items-center space-x-2">
-          <BarChart size={20} className="text-[#EFBE33]" />
-          <span>Subject-Wise Attendance</span>
-          <span className="ml-auto text-xs font-normal text-gray-400">Live via Supabase Realtime</span>
-        </h3>
-        {attendance.length === 0 ? (
-          <div className="h-64 flex items-center justify-center text-gray-300">
-            <div className="text-center">
-              <BarChart size={48} className="mx-auto mb-2 opacity-30" />
-              <p>No attendance records yet</p>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        {/* Attendance Chart */}
+        <div className="lg:col-span-2 glass rounded-[2.5rem] p-6 md:p-8 shadow-xl bg-white">
+          <h3 className="font-bold text-[#272A6F] mb-6 flex items-center space-x-2">
+            <BarChart size={20} className="text-[#EFBE33]" />
+            <span>Attendance Breakdown</span>
+          </h3>
+          {attendance.length === 0 ? (
+            <div className="h-64 flex items-center justify-center text-gray-300">
+              <div className="text-center">
+                <BarChart size={48} className="mx-auto mb-2 opacity-30" />
+                <p>No records found</p>
+              </div>
             </div>
-          </div>
-        ) : (
-          <div className="h-72">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={attendance} margin={{ top: 10, right: 10, left: -20, bottom: 5 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
-                <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false}
-                  tickFormatter={v => v.split(' ').slice(-1)[0]} />
-                <YAxis domain={[0, 100]} tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} unit="%" />
-                <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(39,42,111,0.04)', radius: 8 }} />
-                <ReferenceLine y={75} stroke="#ef4444" strokeDasharray="4 4" label={{ value: '75%', position: 'right', fontSize: 10, fill: '#ef4444' }} />
-                <Bar dataKey="percentage" radius={[10, 10, 0, 0]} barSize={48}>
-                  {attendance.map((entry, i) => (
-                    <Cell key={i} fill={entry.percentage >= 75 ? '#272A6F' : '#ef4444'} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        )}
+          ) : (
+            <div className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={attendance}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
+                  <XAxis dataKey="name" tick={{ fontSize: 10, fill: '#9ca3af', fontWeight: 'bold' }} axisLine={false} tickLine={false}
+                    tickFormatter={v => v.length > 8 ? v.substring(0, 8) + '...' : v} />
+                  <YAxis domain={[0, 100]} tick={{ fontSize: 10, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
+                  <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(39,42,111,0.03)', radius: 10 }} />
+                  <ReferenceLine y={75} stroke="#ef4444" strokeDasharray="3 3" />
+                  <Bar dataKey="percentage" radius={[8, 8, 0, 0]} barSize={40}>
+                    {attendance.map((entry, i) => (
+                      <Cell key={i} fill={entry.percentage >= 75 ? '#272A6F' : '#ef4444'} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+        </div>
+
+        {/* Today's Agenda */}
+        <div className="glass rounded-[2.5rem] p-6 md:p-8 shadow-xl bg-[#272A6F] text-white">
+           <h3 className="font-bold mb-6 flex items-center space-x-2">
+             <Clock size={20} className="text-[#EFBE33]" />
+             <span>Today's Agenda</span>
+           </h3>
+           <div className="space-y-4 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
+              {schedule.length === 0 ? (
+                <p className="text-white/40 text-xs italic">No classes for today</p>
+              ) : (
+                schedule.map((slot, i) => (
+                  <div key={i} className="flex items-center space-x-4 p-4 rounded-2xl bg-white/5 border border-white/10 hover:bg-white/10 transition-all">
+                     <div className="text-center">
+                        <p className="text-[10px] font-black text-white/50">SLOT</p>
+                        <p className="text-xl font-black text-[#EFBE33] leading-none">{slot.slot}</p>
+                     </div>
+                     <div className="flex-1">
+                        <p className="text-xs font-bold leading-tight">{slot.subjects?.name}</p>
+                        <p className="text-[9px] font-black text-white/40 uppercase tracking-tighter mt-1">{SLOT_TIMES[slot.slot]}</p>
+                     </div>
+                  </div>
+                ))
+              )}
+           </div>
+           <button onClick={() => setTab && setTab('timetable')}
+             className="w-full mt-6 py-3 bg-white/10 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-white/20 transition-all">
+             Full Schedule
+           </button>
+        </div>
       </div>
     </div>
   )

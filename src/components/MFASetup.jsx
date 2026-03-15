@@ -133,25 +133,41 @@ export default function MFASetup({ profile }) {
               <ShieldCheck size={36} className="text-green-500" />
             </div>
             <h3 className="text-xl font-bold text-gray-800 mb-2">Account is 2FA Protected</h3>
-            <p className="text-gray-500 text-sm mb-6">
+            <p className="text-gray-500 text-sm mb-6 max-w-sm mx-auto">
               Your professional account is secured with TOTP two-factor authentication. 
-              Even with Gmail login, you'll need your authenticator app for sensitive actions.
+              {profile?.role === 'admin' 
+                ? "As an admin, you can manage your security factors below."
+                : "This security factor is now locked. Contact Admin for resets."}
             </p>
             <div className="inline-flex items-center space-x-2 bg-green-100 text-green-700 px-4 py-2 rounded-full text-sm font-bold mb-6">
               <CheckCircle2 size={16} />
-              <span>TOTP Verified &amp; Active</span>
+              <span>TOTP Verified & Active</span>
             </div>
-            <div className="border-t border-gray-100 pt-4">
-              {factors.map(f => (
-                <div key={f.id} className="flex items-center justify-between">
-                  <span className="text-sm text-gray-600">{f.friendly_name} — {new Date(f.created_at).toLocaleDateString()}</span>
-                  <button onClick={() => unenroll(f.id)} disabled={loading}
-                    className="text-xs text-red-500 hover:text-red-700 font-medium transition-colors">
-                    Remove
-                  </button>
-                </div>
-              ))}
-            </div>
+            
+            {(profile?.role === 'admin' && factors.length > 0) && (
+              <div className="border-t border-gray-100 pt-6 mt-2">
+                <p className="text-[10px] font-black uppercase text-gray-400 mb-4 tracking-widest text-left">Active Factors (Admin Only)</p>
+                {factors.map(f => (
+                  <div key={f.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
+                    <div className="text-left">
+                      <p className="text-sm font-bold text-[#272A6F]">{f.friendly_name}</p>
+                      <p className="text-[9px] text-gray-400 uppercase font-bold">Added {new Date(f.created_at).toLocaleDateString()}</p>
+                    </div>
+                    <button onClick={() => unenroll(f.id)} disabled={loading}
+                      className="bg-red-50 text-red-500 hover:bg-red-500 hover:text-white px-3 py-1.5 rounded-lg text-xs font-black transition-all">
+                      Remove
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {profile?.role !== 'admin' && (
+              <div className="p-4 bg-blue-50/50 rounded-2xl border border-blue-100">
+                <p className="text-[10px] text-blue-800 font-black uppercase tracking-widest">Institutional Lock Active</p>
+                <p className="text-[10px] text-blue-600 font-medium mt-1">For your security, 2FA factors are managed by the institution. Please reach out to the IT department for assistance.</p>
+              </div>
+            )}
           </div>
         </div>
       )}

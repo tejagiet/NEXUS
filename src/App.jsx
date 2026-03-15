@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react'
 import { supabase } from './lib/supabase'
 import Auth from './components/Auth'
 import StudentDashboard from './components/StudentDashboard'
+import StaffDashboard from './components/StaffDashboard'
+import FacultyDashboard from './components/FacultyDashboard'
 import FacultyRegister from './components/FacultyRegister'
 import FinanceBridge from './components/FinanceBridge'
 import CCTVMonitor from './components/CCTVMonitor'
@@ -35,6 +37,7 @@ const MENU = {
     { id: 'mgmt',      label: 'Feedback',        icon: MessageSquare },
   ],
   faculty: [
+    { id: 'dashboard',  label: 'My Nexus',       icon: LayoutDashboard },
     { id: 'register',  label: 'Digital Register', icon: ClipboardList },
     { id: 'timetable', label: 'Class Timetable', icon: Calendar },
     { id: 'calendar',  label: 'Calendar',        icon: ClipboardList },
@@ -70,9 +73,14 @@ MENU.hod = MENU.admin
 MENU.class_teacher = MENU.faculty
 
 function RoleView({ tab, profile, prefill, onPrefillClear, setTab }) {
-  const isStaff = ['admin', 'principal', 'vice_principal', 'hod', 'faculty', 'class_teacher'].includes(profile?.role)
+  const isFaculty = profile?.role === 'faculty' || profile?.role === 'class_teacher'
+  const isAdmin = ['admin', 'principal', 'vice_principal', 'hod'].includes(profile?.role)
+
   switch (tab) {
-    case 'dashboard':    return isStaff ? <ProjectStatus setTab={setTab} /> : <StudentDashboard profile={profile} />
+    case 'dashboard':    
+      if (isAdmin) return <StaffDashboard profile={profile} />
+      if (isFaculty) return <FacultyDashboard profile={profile} setTab={setTab} />
+      return <StudentDashboard profile={profile} setTab={setTab} />
     case 'sbtet':        return <SBTETResults profile={profile} />
     case 'fees':         return <FinanceBridge profile={profile} />
     case 'register':     return <FacultyRegister profile={profile} prefill={prefill} onPrefillClear={onPrefillClear} />
@@ -152,13 +160,13 @@ export default function App() {
         {/* Brand */}
         <div className="p-6 border-b border-white/10">
           <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 bg-[#EFBE33] rounded-xl flex items-center justify-center font-black text-[#272A6F] text-lg shadow-lg">
-              NG
-            </div>
-            <div>
-              <h1 className="font-black text-lg leading-none">Nexus GIET</h1>
-              <p className="text-[10px] text-white/50 tracking-widest uppercase mt-0.5">Polytechnic ERP</p>
-            </div>
+            <div className="p-6 flex flex-col items-center">
+          <div className="w-16 h-16 bg-white/10 rounded-[1.5rem] flex items-center justify-center mb-4 ring-1 ring-white/20">
+            <GraduationCap className="text-[#EFBE33]" size={32} />
+          </div>
+          <h1 className="text-xl font-black tracking-tighter">NEXUS <span className="text-[#EFBE33]">GIET</span></h1>
+          <p className="text-[10px] font-black text-white/30 uppercase tracking-[0.2em] mt-1">Academic Intelligence</p>
+        </div>
           </div>
         </div>
 

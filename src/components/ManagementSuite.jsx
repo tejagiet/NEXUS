@@ -7,7 +7,7 @@ const SECTIONS = ['A', 'B', 'C', 'D']
 const ROLES = ['student', 'faculty', 'admin', 'principal', 'vice_principal', 'hod', 'class_teacher']
 
 const TABS = [
-  { id: 'users', label: 'User Creator', icon: UserPlus, roles: ['admin', 'hod', 'principal'] },
+  { id: 'users', label: 'User Creator', icon: UserPlus, roles: ['admin'] },
   { id: 'subjects', label: 'Subject Manager', icon: BookMarked, roles: ['admin', 'hod', 'principal', 'vice_principal'] },
   { id: 'roles', label: 'Role Manager', icon: ShieldCheck, roles: ['admin'] },
   { id: 'curriculum', label: 'Curriculum', icon: Layers, roles: ['admin', 'hod', 'principal', 'vice_principal'] },
@@ -88,44 +88,93 @@ export default function ManagementSuite({ profile, prefill, onPrefillClear }) {
 }
 
 /* ── Profile Editor ───────────────────────────────── */
-function ProfileEditor({ profile, isAdmin }) {
+function ProfileEditor({ profile }) {
+  const isAdmin = ['admin', 'principal', 'vice_principal', 'hod'].includes(profile?.role)
+  const isFaculty = profile?.role === 'faculty' || profile?.role === 'class_teacher'
+  const isStaff = isAdmin || isFaculty
+
   const [students, setStudents] = useState([])
   const [search, setSearch] = useState('')
-  const [selected, setSelected] = useState(isAdmin ? null : profile)
+  const [selected, setSelected] = useState(!isStaff ? profile : null)
   const [formData, setFormData] = useState({ 
-    full_name: selected?.full_name || '', 
-    mobile: selected?.mobile || '', 
-    email: selected?.email || '' 
+    full_name: '', 
+    mobile: '', 
+    email: '',
+    avatar_url: ''
   })
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [uploading, setUploading] = useState(false)
 
   useEffect(() => {
-    if (isAdmin) {
+    if (isStaff) {
       supabase.from('profiles').select('*').eq('role', 'student')
         .order('full_name', { ascending: true })
         .then(({ data }) => setStudents(data || []))
     }
-  }, [isAdmin])
+  }, [isStaff])
 
   useEffect(() => {
     if (selected) {
       setFormData({
         full_name: selected.full_name || '',
         mobile: selected.mobile || '',
-        email: selected.email || ''
+        email: selected.email || '',
+        avatar_url: selected.avatar_url || ''
       })
+    } else if (!isStaff) {
+      setSelected(profile)
     }
-  }, [selected])
+  }, [selected, isStaff, profile])
+
+  async function handleAvatarUpload(e) {
+    const file = e.target.files[0]
+    if (!file || !selected) return
+    
+    // 🏛️ Enforce 1MB Limit
+    if (file.size > 1024 * 1024) {
+      alert("Institutional Policy: Profile pictures must be under 1MB.")
+      return
+    }
+
+    setUploading(true)
+    try {
+      const fileExt = file.name.split('.').pop()
+      const fileName = `${selected.id}/${Math.random()}.${fileExt}`
+      const { error: uploadError } = await supabase.storage
+        .from('avatars')
+        .upload(fileName, file, { upsert: true })
+
+      if (uploadError) throw uploadError
+
+      const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(fileName)
+      setFormData(prev => ({ ...prev, avatar_url: publicUrl }))
+      
+      // Auto-save the URL to profile
+      await supabase.from('profiles').update({ avatar_url: publicUrl }).eq('id', selected.id)
+    } catch (err) {
+      alert("Upload failed: " + err.message)
+    } finally {
+      setUploading(false)
+    }
+  }
 
   async function saveProfile() {
     if (!selected) return
     setSaving(true)
-    const { error } = await supabase.from('profiles').update({
+    
+    const updateData = {
       full_name: formData.full_name,
       mobile: formData.mobile,
-      email: formData.email
-    }).eq('id', selected.id)
+      avatar_url: formData.avatar_url
+    }
+
+    // 🔒 Email Lock Logic: Only Staff can change emails
+    if (isStaff) {
+      updateData.email = formData.email
+    }
+
+    const { error } = await supabase.from('profiles').update(updateData).eq('id', selected.id)
 
     if (error) alert("Update failed: " + error.message)
     else {
@@ -142,18 +191,18 @@ function ProfileEditor({ profile, isAdmin }) {
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-      {isAdmin && (
+      {isStaff && (
         <div className="lg:col-span-1 space-y-4">
-          <p className="text-[10px] font-black uppercase text-gray-400">Select Student</p>
+          <p className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Student Directory</p>
           <div className="relative">
-            <Users size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search students..."
-              className="w-full h-10 pl-9 pr-4 bg-gray-50 border border-gray-100 rounded-xl text-xs font-bold focus:ring-2 focus:ring-[#272A6F] outline-none" />
+            <Users size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Find student..."
+              className="w-full h-12 pl-11 pr-4 bg-gray-50 border border-gray-100 rounded-2xl text-xs font-bold focus:ring-2 focus:ring-[#272A6F] outline-none" />
           </div>
-          <div className="space-y-2 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
+          <div className="space-y-2 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
             {filtered.map(s => (
               <button key={s.id} onClick={() => setSelected(s)}
-                className={`w-full text-left p-4 rounded-2xl border transition-all ${selected?.id === s.id ? 'bg-[#272A6F] text-white border-[#272A6F] shadow-lg scale-[1.02]' : 'bg-gray-50 hover:bg-gray-100 text-gray-700 border-gray-100'}`}>
+                className={`w-full text-left p-4 rounded-3xl border-2 transition-all ${selected?.id === s.id ? 'bg-[#272A6F] text-white border-[#272A6F] shadow-xl scale-[1.02]' : 'bg-white hover:bg-gray-50 text-gray-700 border-gray-100'}`}>
                 <p className="font-bold text-sm leading-tight">{s.full_name}</p>
                 <p className={`text-[10px] font-mono mt-1 ${selected?.id === s.id ? 'text-white/60' : 'text-gray-400'}`}>{s.pin_number}</p>
               </button>
@@ -162,64 +211,99 @@ function ProfileEditor({ profile, isAdmin }) {
         </div>
       )}
 
-      <div className={`${isAdmin ? 'lg:col-span-2' : 'col-span-full'} space-y-6 pt-6 lg:pt-0`}>
+      <div className={`${isStaff ? 'lg:col-span-2' : 'col-span-full'} space-y-6`}>
         {selected ? (
-          <div className="glass rounded-[2.5rem] p-8 border-2 border-dashed border-[#272A6F]/10">
-            <div className="flex items-center space-x-6 mb-8 pb-8 border-b border-gray-100">
-              <div className="w-20 h-20 bg-[#272A6F] rounded-[2rem] flex items-center justify-center text-white text-3xl font-black shadow-xl">
-                {formData.full_name?.[0] || '?'}
+          <div className="glass rounded-[2.5rem] p-8 border-2 border-[#272A6F]/5 relative overflow-hidden">
+            <div className="flex flex-col md:flex-row items-center md:items-start space-x-0 md:space-x-8 mb-10 pb-10 border-b border-gray-100">
+              <div className="relative group mb-6 md:mb-0">
+                <div className="w-28 h-28 bg-gradient-to-br from-[#272A6F] to-indigo-900 rounded-[2.5rem] flex items-center justify-center text-white text-4xl font-black shadow-2xl overflow-hidden ring-4 ring-white">
+                  {formData.avatar_url ? (
+                    <img src={formData.avatar_url} alt="Avatar" className="w-full h-full object-cover" />
+                  ) : (
+                    formData.full_name?.[0] || '?'
+                  )}
+                  {uploading && (
+                    <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
+                      <Loader2 className="animate-spin text-white" />
+                    </div>
+                  )}
+                </div>
+                <label className="absolute -bottom-2 -right-2 w-10 h-10 bg-[#EFBE33] rounded-2xl flex items-center justify-center text-[#272A6F] shadow-lg cursor-pointer hover:scale-110 transition-all border-4 border-white">
+                  <CloudUpload size={18} />
+                  <input type="file" accept="image/*" onChange={handleAvatarUpload} className="hidden" />
+                </label>
               </div>
-              <div>
-                <h3 className="text-2xl font-black text-[#272A6F]">{formData.full_name}</h3>
-                <p className="text-gray-400 font-bold uppercase tracking-widest text-[10px]">{selected.role} • {selected.pin_number || 'STAFF'}</p>
+              <div className="text-center md:text-left flex-1 py-2">
+                <h3 className="text-3xl font-black text-[#272A6F]">{formData.full_name || 'Incomplete Profile'}</h3>
+                <p className="text-gray-400 font-bold uppercase tracking-[0.2em] text-[10px] mt-2 flex items-center justify-center md:justify-start">
+                  <span className="bg-[#272A6F]/10 text-[#272A6F] px-3 py-1 rounded-lg mr-2">{selected.role}</span>
+                  {selected.pin_number || 'STAFF ACCOUNT'}
+                </p>
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-10">
               <div className="space-y-2">
-                <label className="flex items-center space-x-2 text-[10px] font-black uppercase text-gray-400 tracking-widest">
+                <label className="flex items-center space-x-2 text-[10px] font-black uppercase text-gray-400 tracking-widest ml-1">
                   <User2 size={12} /><span>Full Name</span>
                 </label>
                 <input value={formData.full_name} onChange={e => setFormData({ ...formData, full_name: e.target.value })}
-                  className="w-full h-11 bg-white border-2 border-gray-50 rounded-xl px-4 text-sm font-bold focus:border-[#272A6F] outline-none transition-all" />
+                  className="w-full h-12 bg-gray-50 border-2 border-transparent rounded-2xl px-5 text-sm font-bold focus:bg-white focus:border-[#272A6F] outline-none transition-all shadow-sm" />
               </div>
 
               <div className="space-y-2">
-                <label className="flex items-center space-x-2 text-[10px] font-black uppercase text-gray-400 tracking-widest">
-                  <Mail size={12} /><span>Email Address</span>
+                <label className="flex items-center space-x-2 text-[10px] font-black uppercase text-gray-400 tracking-widest ml-1">
+                  <Mail size={12} /><span>Institutional Email</span>
                 </label>
-                <input value={formData.email} onChange={e => setFormData({ ...formData, email: e.target.value })}
-                  className="w-full h-11 bg-white border-2 border-gray-50 rounded-xl px-4 text-sm font-bold focus:border-[#272A6F] outline-none transition-all" />
+                <div className="relative">
+                  <input 
+                    value={formData.email} 
+                    onChange={e => setFormData({ ...formData, email: e.target.value })} 
+                    disabled={!isStaff && profile?.role === 'student'}
+                    placeholder="e.g. example@nexusgiet.edu.in"
+                    className={`w-full h-12 border-2 rounded-2xl px-5 text-sm font-bold outline-none transition-all shadow-sm
+                      ${!isStaff && profile?.role === 'student' ? 'bg-gray-100 border-gray-100 text-gray-400 cursor-not-allowed' : 'bg-gray-50 border-transparent focus:bg-white focus:border-[#272A6F]'}`} 
+                  />
+                  {!isStaff && profile?.role === 'student' && (
+                    <Lock size={12} className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-300" />
+                  )}
+                </div>
+                {!isStaff && profile?.role === 'student' && (
+                  <p className="text-[9px] text-gray-400 font-bold mt-1 ml-1 uppercase">Contact Admin to change email</p>
+                )}
               </div>
 
               <div className="space-y-2">
-                <label className="flex items-center space-x-2 text-[10px] font-black uppercase text-gray-400 tracking-widest">
-                  <Phone size={12} /><span>Mobile Number</span>
+                <label className="flex items-center space-x-2 text-[10px] font-black uppercase text-gray-400 tracking-widest ml-1">
+                  <Phone size={12} /><span>Mobile Connectivity</span>
                 </label>
                 <input value={formData.mobile} onChange={e => setFormData({ ...formData, mobile: e.target.value })} maxLength={10}
-                  placeholder="e.g. 9876543210"
-                  className="w-full h-11 bg-white border-2 border-gray-50 rounded-xl px-4 text-sm font-bold focus:border-[#272A6F] outline-none transition-all" />
+                  placeholder="10-digit primary number"
+                  className="w-full h-12 bg-gray-50 border-2 border-transparent rounded-2xl px-5 text-sm font-bold focus:bg-white focus:border-[#272A6F] outline-none transition-all shadow-sm" />
               </div>
 
-              <div className="space-y-2 opacity-50 cursor-not-allowed">
-                <label className="flex items-center space-x-2 text-[10px] font-black uppercase text-gray-400 tracking-widest">
-                  <Lock size={12} /><span>PIN Number</span>
+              <div className="space-y-2">
+                <label className="flex items-center space-x-2 text-[10px] font-black uppercase text-gray-400 tracking-widest ml-1">
+                  <BadgeCheck size={12} /><span>Official PIN / ID</span>
                 </label>
-                <input disabled value={selected.pin_number || 'N/A'}
-                  className="w-full h-11 bg-gray-100 border-2 border-gray-100 rounded-xl px-4 text-sm font-bold outline-none" />
+                <input disabled value={selected.pin_number || 'ADMINISTRATOR'}
+                  className="w-full h-12 bg-gray-100 border-2 border-gray-100 rounded-2xl px-5 text-sm font-bold text-gray-400 outline-none shadow-sm cursor-not-allowed" />
               </div>
             </div>
 
             <button onClick={saveProfile} disabled={saving}
-              className="w-full h-14 flex items-center justify-center space-x-3 bg-[#272A6F] text-white rounded-2xl font-black text-sm hover:shadow-2xl hover:-translate-y-1 transition-all active:scale-95 disabled:opacity-50">
-              {saving ? <Loader2 className="animate-spin" size={20} /> : saved ? <BadgeCheck size={20} /> : <Save size={20} />}
-              <span>{saved ? 'Profile Updated Successfully!' : 'Commit Changes to Nexus'}</span>
+              className="w-full h-16 flex items-center justify-center space-x-3 bg-[#272A6F] text-white rounded-[1.5rem] font-black text-sm hover:shadow-2xl hover:-translate-y-1 transition-all active:scale-[0.98] disabled:opacity-50 shadow-lg shadow-[#272A6F]/20">
+              {saving ? <Loader2 className="animate-spin" size={20} /> : saved ? <CheckCircle2 size={20} className="text-[#EFBE33]" /> : <Save size={20} />}
+              <span className="uppercase tracking-[0.1em]">{saved ? 'Profile Vault Updated!' : 'Commit Changes to Nexus'}</span>
             </button>
           </div>
         ) : (
-          <div className="flex flex-col items-center justify-center py-20 bg-gray-50 rounded-[2.5rem] border-2 border-dashed border-gray-100">
-            <User2 size={48} className="text-gray-200 mb-4" />
-            <p className="text-gray-400 font-bold">Select a student profile from the left directory to begin maintenance.</p>
+          <div className="flex flex-col items-center justify-center py-24 bg-gray-50 rounded-[3rem] border-2 border-dashed border-gray-200">
+            <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center text-gray-300 mb-6">
+               <User2 size={40} />
+            </div>
+            <p className="text-gray-400 font-bold uppercase tracking-widest text-xs">Awaiting Selection</p>
+            <p className="text-gray-300 text-sm mt-1">Select a profile from the directory to begin maintenance.</p>
           </div>
         )}
       </div>
