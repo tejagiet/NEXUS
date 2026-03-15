@@ -186,7 +186,7 @@ export default function App() {
         {/* Nav */}
         <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
           <p className="text-[10px] text-white/30 uppercase tracking-widest px-3 mb-3">
-            {profile?.roles?.join(' & ') || profile?.role || 'Loading'} Portal
+            {(profile?.roles || [profile?.role]).filter(Boolean).map(r => r.replace('_', ' ')).join(' & ') || 'Student'} Portal
           </p>
           {menu.map(item => (
             <button
@@ -211,7 +211,9 @@ export default function App() {
             </div>
             <div className="min-w-0">
               <p className="text-sm font-bold truncate">{profile?.full_name || session.user.email}</p>
-              <p className="text-[11px] text-[#EFBE33] capitalize font-medium">{profile?.role}</p>
+              <p className="text-[11px] text-[#EFBE33] capitalize font-medium">
+                {(profile?.roles || [profile?.role]).filter(Boolean)[0]?.replace('_', ' ') || 'Student'}
+              </p>
             </div>
           </div>
           <button

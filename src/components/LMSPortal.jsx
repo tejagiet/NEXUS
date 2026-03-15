@@ -14,7 +14,9 @@ export default function LMSPortal({ profile }) {
   const [curriculum, setCurriculum] = useState([])
   const [loading, setLoading] = useState(true)
   const [uploading, setUploading] = useState(false)
-  const [filter, setFilter] = useState(profile?.role === 'student' ? (profile?.branch || 'CME') : 'ALL')
+  const userRoles = profile?.roles || [profile?.role] || []
+  const isStudent = userRoles.includes('student')
+  const [filter, setFilter] = useState(isStudent ? (profile?.branch || 'CME') : 'ALL')
   const [error, setError] = useState(null)
   const fileRef = useRef()
 
@@ -62,7 +64,7 @@ export default function LMSPortal({ profile }) {
 
   async function fetchAttendanceStats() {
     setLoading(true)
-    if (profile?.role === 'student' && profile?.pin_number) {
+    if (userRoles.includes('student') && profile?.pin_number) {
       // For students, fetch by their PIN
       const { data: student } = await supabase.from('students').select('id').eq('pin_number', profile.pin_number).maybeSingle()
       if (student) {
@@ -119,8 +121,8 @@ export default function LMSPortal({ profile }) {
     fetchFiles()
   }
 
-  const isFaculty = ['admin', 'principal', 'hod', 'faculty', 'class_teacher', 'vice_principal'].includes(profile?.role)
-  const isStaff = ['admin', 'principal', 'hod', 'faculty', 'class_teacher', 'vice_principal'].includes(profile?.role)
+  const isFaculty = userRoles.some(r => ['admin', 'principal', 'hod', 'faculty', 'class_teacher', 'vice_principal'].includes(r))
+  const isStaff = userRoles.some(r => ['admin', 'principal', 'hod', 'faculty', 'class_teacher', 'vice_principal'].includes(r))
 
   return (
     <div className="space-y-8">
@@ -338,7 +340,8 @@ export default function LMSPortal({ profile }) {
 
 function AssignmentsHub({ profile, assignments, refresh }) {
   const [showCreate, setShowCreate] = useState(false)
-  const isAdmin = ['admin', 'principal', 'faculty', 'hod', 'class_teacher'].includes(profile.role)
+  const userRoles = profile?.roles || [profile?.role] || []
+  const isAdmin = userRoles.some(r => ['admin', 'principal', 'faculty', 'hod', 'class_teacher'].includes(r))
 
   return (
     <div className="space-y-6">
@@ -403,7 +406,7 @@ function CreateAssignment({ profile, onCreated }) {
 
 function AssignmentCard({ assignment, profile, refresh }) {
   const [submitting, setSubmitting] = useState(false)
-  const isStudent = profile.role === 'student'
+  const isStudent = (profile?.roles || [profile?.role]).includes('student')
   const submission = assignment.submissions?.find(s => s.student_id === profile.id)
 
   async function submitWork() {

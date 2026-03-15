@@ -28,10 +28,9 @@ export default function SmartTimetable({ profile, onMarkAttendance }) {
   const [status, setStatus] = useState(null)
 
   const [activeSlot, setActiveSlot] = useState(null) // { day, slot }
-  const [viewMode, setViewMode] = useState(profile?.role === 'student' ? 'class' : 'personal') // 'class' | 'personal'
-
-  const isStaff = ['admin', 'principal', 'hod', 'faculty', 'class_teacher', 'vice_principal'].includes(profile?.role)
-  const isHOD = ['admin', 'hod', 'principal'].includes(profile?.role)
+  const userRoles = profile?.roles || [profile?.role] || []
+  const isStaff = userRoles.some(r => ['admin', 'principal', 'hod', 'faculty', 'class_teacher', 'vice_principal'].includes(r))
+  const isHOD = userRoles.some(r => ['admin', 'hod', 'principal'].includes(r))
 
   useEffect(() => {
     fetchData()
@@ -133,7 +132,7 @@ export default function SmartTimetable({ profile, onMarkAttendance }) {
           )}
           {viewMode === 'class' && (
             <>
-              <select value={branch} onChange={e => setBranch(e.target.value)} disabled={profile?.role === 'student' || (!isHOD && profile?.branch)}
+              <select value={branch} onChange={e => setBranch(e.target.value)} disabled={(profile?.roles || [profile?.role]).includes('student') || (!isHOD && profile?.branch)}
                 className="border-2 border-gray-100 rounded-xl px-4 py-2 text-sm font-bold focus:border-[#272A6F] outline-none bg-white disabled:opacity-50">
                 {BRANCHES.map(b => <option key={b}>{b}</option>)}
               </select>
@@ -141,7 +140,7 @@ export default function SmartTimetable({ profile, onMarkAttendance }) {
                 className="border-2 border-gray-100 rounded-xl px-4 py-2 text-sm font-bold focus:border-[#272A6F] outline-none bg-white">
                 {SEMESTERS.map(s => <option key={s}>{s}</option>)}
               </select>
-              <select value={section} onChange={e => setSection(e.target.value)} disabled={profile?.role === 'student'}
+              <select value={section} onChange={e => setSection(e.target.value)} disabled={(profile?.roles || [profile?.role]).includes('student')}
                 className="border-2 border-gray-100 rounded-xl px-4 py-2 text-sm font-bold focus:border-[#272A6F] outline-none bg-white disabled:opacity-50">
                 {['A', 'B', 'C'].map(s => <option key={s}>{s}</option>)}
               </select>

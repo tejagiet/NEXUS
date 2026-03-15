@@ -135,7 +135,7 @@ export default function MFASetup({ profile }) {
             <h3 className="text-xl font-bold text-gray-800 mb-2">Account is 2FA Protected</h3>
             <p className="text-gray-500 text-sm mb-6 max-w-sm mx-auto">
               Your professional account is secured with TOTP two-factor authentication. 
-              {profile?.role === 'admin' 
+              {(profile?.roles || [profile?.role]).includes('admin') 
                 ? "As an admin, you can manage your security factors below."
                 : "This security factor is now locked. Contact Admin for resets."}
             </p>
@@ -144,7 +144,7 @@ export default function MFASetup({ profile }) {
               <span>TOTP Verified & Active</span>
             </div>
             
-            {(profile?.role === 'admin' && factors.length > 0) && (
+            {((profile?.roles || [profile?.role]).includes('admin') && factors.length > 0) && (
               <div className="border-t border-gray-100 pt-6 mt-2">
                 <p className="text-[10px] font-black uppercase text-gray-400 mb-4 tracking-widest text-left">Active Factors (Admin Only)</p>
                 {factors.map(f => (
@@ -162,7 +162,7 @@ export default function MFASetup({ profile }) {
               </div>
             )}
 
-            {profile?.role !== 'admin' && (
+            {!(profile?.roles || [profile?.role]).includes('admin') && (
               <div className="p-4 bg-blue-50/50 rounded-2xl border border-blue-100">
                 <p className="text-[10px] text-blue-800 font-black uppercase tracking-widest">Institutional Lock Active</p>
                 <p className="text-[10px] text-blue-600 font-medium mt-1">For your security, 2FA factors are managed by the institution. Please reach out to the IT department for assistance.</p>

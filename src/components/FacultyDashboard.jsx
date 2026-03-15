@@ -86,7 +86,7 @@ export default function FacultyDashboard({ profile, setTab }) {
       <header className="flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>
           <h2 className="text-3xl font-black text-[#272A6F]">Faculty Command</h2>
-          <p className="text-gray-500 mt-1 capitalize font-medium">Welcome back, Prof. {profile.full_name?.split(' ')[0]}</p>
+          <p className="text-gray-500 mt-1 capitalize font-medium">Welcome back, Prof. {profile?.full_name?.split(' ')[0] || 'Faculty'}</p>
         </div>
         <div className="flex items-center space-x-2 bg-blue-50 px-4 py-2 rounded-2xl border border-blue-100">
            <Calendar size={16} className="text-blue-600" />

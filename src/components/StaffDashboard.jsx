@@ -79,7 +79,7 @@ export default function StaffDashboard({ profile }) {
       <header>
         <h2 className="text-3xl font-black text-[#272A6F]">Institutional Overview</h2>
         <p className="text-gray-500 mt-1 uppercase text-[10px] font-black tracking-widest">
-          {profile.role.replace('_', ' ')} Command Center
+          {(profile?.roles || [profile?.role]).filter(Boolean).map(r => r.replace('_', ' ')).join(' & ') || 'Admin'} Command Center
         </p>
       </header>
 

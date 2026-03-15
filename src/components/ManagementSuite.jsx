@@ -26,9 +26,11 @@ export default function ManagementSuite({ profile, prefill, onPrefillClear }) {
   }, [prefill])
 
   useEffect(() => {
-    // Default to the first allowed tab based on role
+    // 🏛️ Multi-Role Tab Initialization
+    const userRoles = profile?.roles || [profile?.role] || ['student']
+    
     if (!activeTab || !TABS.find(t => t.id === activeTab)) {
-      const allowed = TABS.filter(t => t.roles.includes(profile?.role))
+      const allowed = TABS.filter(t => t.roles.some(r => userRoles.includes(r)))
       if (allowed.length > 0) setActiveTab(allowed[0].id)
     }
   }, [profile, activeTab])
@@ -49,12 +51,12 @@ export default function ManagementSuite({ profile, prefill, onPrefillClear }) {
           </h2>
           <p className="text-gray-500 text-sm font-medium">Control center for students, subjects, and system health.</p>
         </div>
-        <div className="flex bg-gray-100 p-1 rounded-2xl border border-gray-200 shadow-inner">
-          {TABS.filter(t => t.roles.includes(profile?.role)).map(t => (
+        <div className="flex bg-gray-100 p-1 rounded-2xl border border-gray-200 shadow-inner overflow-x-auto max-w-full">
+          {TABS.filter(t => t.roles.some(r => (profile?.roles || [profile?.role]).includes(r))).map(t => (
             <button
               key={t.id}
               onClick={() => setActiveTab(t.id)}
-              className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-xs font-black transition-all ${activeTab === t.id
+              className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-xs font-black transition-all whitespace-nowrap ${activeTab === t.id
                   ? 'bg-white text-[#272A6F] shadow-lg scale-105'
                   : 'text-gray-400 hover:text-gray-600'
                 }`}
@@ -95,8 +97,9 @@ export default function ManagementSuite({ profile, prefill, onPrefillClear }) {
 
 /* ── Profile Editor ───────────────────────────────── */
 function ProfileEditor({ profile }) {
-  const isAdmin = ['admin', 'principal', 'vice_principal', 'hod'].includes(profile?.role)
-  const isFaculty = profile?.role === 'faculty' || profile?.role === 'class_teacher'
+  const userRoles = profile?.roles || [profile?.role] || []
+  const isAdmin = userRoles.some(r => ['admin', 'principal', 'vice_principal', 'hod'].includes(r))
+  const isFaculty = userRoles.some(r => r === 'faculty' || r === 'class_teacher')
   const isStaff = isAdmin || isFaculty
 
   const [students, setStudents] = useState([])
