@@ -4,7 +4,17 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, Cell, ReferenceLine
 } from 'recharts'
-import { TrendingUp, AlertCircle, CalendarCheck, BookOpen, Loader2, Zap } from 'lucide-react'
+import { TrendingUp, AlertCircle, CalendarCheck, BookOpen, Loader2, Zap, Clock, Wallet } from 'lucide-react'
+
+const SLOT_TIMES = {
+  1: '09:00 - 10:00',
+  2: '10:00 - 11:00',
+  3: '11:00 - 12:00',
+  4: '12:00 - 01:00',
+  5: '02:00 - 03:00',
+  6: '03:00 - 04:00',
+  7: '04:00 - 05:00'
+}
 
 export default function StudentDashboard({ profile, setTab }) {
   const [attendance, setAttendance]  = useState([])
