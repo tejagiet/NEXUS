@@ -107,14 +107,22 @@ function SurveillanceNode({ stream, motionActive, onFullscreen, hlsLoaded }) {
               <ShieldAlert className="w-12 h-12 mb-4 opacity-50" />
               <p className="font-black text-[10px] uppercase tracking-[0.2em] text-white">Mixed Content Blocked</p>
               <p className="text-[9px] text-white/40 mt-1 max-w-[200px]">Browser blocked this insecure stream. Secure (HTTPS) upgrade required.</p>
-              <a 
-                href={stream.url} 
-                target="_blank" 
-                rel="noopener noreferrer" 
-                className="mt-4 px-4 py-2 bg-amber-500/20 hover:bg-amber-500/40 rounded-xl transition-all text-amber-400 border border-amber-500/20 text-[9px] font-black uppercase tracking-widest"
-              >
-                Open External Stream →
-              </a>
+              <div className="flex gap-2 mt-4">
+                <a 
+                  href={stream.url} 
+                  target="_blank" 
+                  rel="noopener noreferrer" 
+                  className="px-4 py-2 bg-amber-500/10 hover:bg-amber-500/20 rounded-xl transition-all text-amber-500 border border-amber-500/20 text-[9px] font-black uppercase tracking-widest"
+                >
+                  Direct Link
+                </a>
+                <button 
+                  onClick={() => onFullscreen({ ...stream, showGuide: true })}
+                  className="px-4 py-2 bg-[#EFBE33] text-[#272A6F] rounded-xl transition-all font-black text-[9px] uppercase tracking-widest"
+                >
+                  How to Fix →
+                </button>
+              </div>
             </div>
           ) : isRTSP ? (
             <div className="w-full h-full flex flex-col items-center justify-center bg-[#0a0a0a] text-yellow-500/50 p-6 text-center">
@@ -251,6 +259,11 @@ export default function CCTVMonitor({ profile }) {
   const [isCinemaMode, setIsCinemaMode] = useState(false)
   const [fullscreenStream, setFullscreenStream] = useState(null)
   const [hlsLoaded, setHlsLoaded] = useState(!!window.Hls)
+  
+  // 🛰️ Proxy & Compatibility State
+  const [proxyUrl, setProxyUrl] = useState(localStorage.getItem('nexus_cctv_proxy') || '')
+  const [showCompatibilityInfo, setShowCompatibilityInfo] = useState(false)
+  const [showSettings, setShowSettings] = useState(false)
 
   useEffect(() => {
     // 📼 Load HLS.js for browser support with State Tracking
@@ -289,6 +302,20 @@ export default function CCTVMonitor({ profile }) {
       supabase.removeChannel(motionChannel)
     }
   }, [])
+
+  useEffect(() => {
+    if (proxyUrl) localStorage.setItem('nexus_cctv_proxy', proxyUrl)
+    else localStorage.removeItem('nexus_cctv_proxy')
+  }, [proxyUrl])
+
+  // 🛡️ Helper to apply proxy to insecure URLs
+  const getStreamUrl = (url) => {
+    if (!url) return ''
+    if (window.location.protocol === 'https:' && url.startsWith('http://') && proxyUrl) {
+      return `${proxyUrl.replace(/\/$/, '')}/${url.replace(/^http:\/\//, '')}`
+    }
+    return url
+  }
 
   async function fetchNodes() {
     const { data } = await supabase.from('cctv_nodes').select('*').eq('is_active', true).order('created_at', { ascending: true })
@@ -330,6 +357,13 @@ export default function CCTVMonitor({ profile }) {
         
         <div className="flex items-center gap-4">
           <button 
+            onClick={() => setShowSettings(!showSettings)}
+            className={`p-3 rounded-2xl transition-all border ${showSettings ? 'bg-[#272A6F] text-white' : 'bg-white border-gray-100 text-gray-400 hover:text-[#272A6F]'}`}
+            title="Surveillance Settings"
+          >
+            <Settings size={24} />
+          </button>
+          <button 
             onClick={() => setIsCinemaMode(!isCinemaMode)}
             className={`p-3 rounded-2xl transition-all border ${isCinemaMode ? 'bg-[#EFBE33] text-[#272A6F] border-transparent shadow-xl' : 'bg-white border-gray-100 text-gray-400 hover:text-[#272A6F]'}`}
           >
@@ -344,6 +378,56 @@ export default function CCTVMonitor({ profile }) {
           </button>
         </div>
       </header>
+
+      {/* ⚙️ Proxy Settings Panel */}
+      <AnimatePresence>
+        {showSettings && (
+          <motion.div 
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            className="bg-white rounded-3xl p-8 mb-10 border border-gray-100 shadow-xl overflow-hidden"
+          >
+            <div className="flex items-start justify-between mb-6">
+              <div>
+                <h3 className="text-xl font-black text-[#272A6F] uppercase tracking-tight">Surveillance Proxy Configuration</h3>
+                <p className="text-xs text-gray-400 font-bold uppercase tracking-widest mt-1">Tunnel insecure legacy streams through a secure bridge</p>
+              </div>
+              <Activity className="text-[#EFBE33] opacity-20" size={32} />
+            </div>
+            
+            <div className="space-y-4">
+              <label className="block text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] ml-2">Secure Proxy Endpoint (HTTPS)</label>
+              <div className="flex gap-4">
+                <input 
+                  type="url" 
+                  placeholder="https://your-proxy-bridge.com"
+                  value={proxyUrl}
+                  onChange={(e) => setProxyUrl(e.target.value)}
+                  className="flex-1 bg-gray-50 border-2 border-gray-100 rounded-2xl px-6 py-4 outline-none focus:border-[#272A6F]/20 transition-all font-mono text-xs"
+                />
+                <button 
+                  onClick={() => {
+                    setProxyUrl('')
+                    setShowSettings(false)
+                  }}
+                  className="px-6 py-4 text-gray-400 font-black uppercase text-[10px] hover:text-red-500 transition-colors"
+                >
+                  Clear Proxy
+                </button>
+              </div>
+              <div className="p-4 bg-blue-50/50 rounded-2xl border border-blue-100/50 flex items-start gap-4">
+                <ShieldAlert className="text-blue-500 shrink-0" size={18} />
+                <p className="text-[10px] text-blue-600/80 leading-relaxed">
+                  If your CCTV cameras use `http://`, the browser will block them on this secure site. 
+                  Use a Proxy Bridge (like the Nexus Proxy Script) to tunnel these streams securely. 
+                  Leave empty to use direct browser loading (requires manual "Allow Insecure Content" setting).
+                </p>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <AnimatePresence>
         {motionActive && (
@@ -422,7 +506,7 @@ export default function CCTVMonitor({ profile }) {
                 {activeStreams.slice(isCinemaMode ? 1 : 0).map(stream => (
                   <SurveillanceNode 
                     key={stream.id} 
-                    stream={stream} 
+                    stream={{...stream, url: getStreamUrl(stream.url)}} 
                     motionActive={motionActive} 
                     onFullscreen={setFullscreenStream}
                     hlsLoaded={hlsLoaded}
@@ -476,6 +560,75 @@ export default function CCTVMonitor({ profile }) {
                 <span>Signal Strength: 100% | Ultra HD Secure</span>
               </div>
             </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* 🛡️ Compatibility Helper Modal */}
+      <AnimatePresence>
+        {showCompatibilityInfo && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[120] bg-[#272A6F]/20 backdrop-blur-xl flex items-center justify-center p-6"
+          >
+            <motion.div 
+              initial={{ scale: 0.9, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              className="bg-white rounded-[2.5rem] p-10 max-w-2xl w-full shadow-2xl relative overflow-hidden"
+            >
+              <button 
+                onClick={() => setShowCompatibilityInfo(false)}
+                className="absolute top-8 right-8 text-gray-400 hover:text-[#272A6F] transition-colors"
+              >
+                <X size={24} />
+              </button>
+
+              <div className="flex items-center gap-6 mb-8">
+                <div className="p-4 bg-[#EFBE33]/10 rounded-3xl">
+                  <ShieldAlert className="text-[#EFBE33]" size={32} />
+                </div>
+                <div>
+                  <h3 className="text-2xl font-black text-[#272A6F] uppercase tracking-tight leading-none">Compatibility Guide</h3>
+                  <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-2">Bypassing Mixed Content Restrictions</p>
+                </div>
+              </div>
+
+              <div className="space-y-6">
+                <div className="flex gap-4 p-5 bg-gray-50 rounded-2xl border border-gray-100 italic font-medium text-xs text-gray-600">
+                  Modern browsers block "http" video on secure "https" sites. To see legacy cameras directly, you must manually "Allow" them for this domain.
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-3">
+                    <p className="text-[10px] font-black text-[#272A6F] uppercase tracking-widest">For Chrome / Edge</p>
+                    <ul className="text-[11px] text-gray-500 space-y-2 list-decimal list-inside">
+                      <li>Click the <span className="font-bold underline">Lock Icon</span> next to the URL.</li>
+                      <li>Select <span className="font-bold underline">Site Settings</span>.</li>
+                      <li>Find <span className="font-bold underline">Insecure Content</span>.</li>
+                      <li>Change to <span className="font-bold text-[#272A6F]">Allow</span>.</li>
+                    </ul>
+                  </div>
+                  <div className="space-y-3">
+                    <p className="text-[10px] font-black text-[#272A6F] uppercase tracking-widest">Recommended Fix</p>
+                    <p className="text-[11px] text-gray-500 leading-relaxed">
+                      Instead of bypassing security, we recommend using a <b>Secure Proxy Bridge</b>. 
+                      You can configure one in the <Settings size={12} className="inline mb-0.5" /> Surveillance Settings menu.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-10 flex justify-end">
+                <button 
+                  onClick={() => setShowCompatibilityInfo(false)}
+                  className="bg-[#272A6F] text-white px-8 py-4 rounded-2xl font-black uppercase tracking-widest text-[10px] hover:scale-105 transition-all shadow-xl shadow-[#272A6F]/20"
+                >
+                  Understood
+                </button>
+              </div>
+            </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
