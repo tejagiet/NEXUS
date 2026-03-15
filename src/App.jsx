@@ -35,6 +35,7 @@ const MENU = {
     { id: 'fees',      label: 'Finance',        icon: Wallet },
     { id: 'lms',       label: 'Resources',      icon: BookOpen },
     { id: 'mgmt',      label: 'Feedback',        icon: MessageSquare },
+    { id: 'profile',   label: 'My Profile',      icon: User },
   ],
   faculty: [
     { id: 'dashboard',  label: 'My Nexus',       icon: LayoutDashboard },
@@ -49,6 +50,7 @@ const MENU = {
     { id: 'batchfees',    label: 'Finance Batch',  icon: Layers },
     { id: 'mgmt',      label: 'Management',       icon: Settings },
     { id: 'mfa',       label: 'Security (2FA)',    icon: ShieldCheck },
+    { id: 'profile',   label: 'My Profile',        icon: User },
   ],
   admin: [
     { id: 'dashboard',    label: 'Overview',       icon: LayoutDashboard },
@@ -63,6 +65,7 @@ const MENU = {
     { id: 'mgmt',         label: 'Management',     icon: Settings },
     { id: 'lms',          label: 'Resources',      icon: BookOpen },
     { id: 'mfa',          label: 'Security (2FA)',   icon: ShieldCheck },
+    { id: 'profile',      label: 'My Profile',       icon: User },
   ],
 }
 
@@ -90,6 +93,7 @@ function RoleView({ tab, profile, prefill, onPrefillClear, setTab }) {
     case 'cctv':         return <CCTVMonitor profile={profile} />
     case 'mfa':          return <MFASetup profile={profile} />
     case 'mgmt':         return <ManagementSuite profile={profile} prefill={prefill} onPrefillClear={onPrefillClear} />
+    case 'profile':      return <ManagementSuite profile={profile} prefill={{ tab: 'profiles' }} onPrefillClear={onPrefillClear} />
     case 'timetable':    return <SmartTimetable profile={profile} onMarkAttendance={(subId) => onPrefillClear(subId)} />
     case 'calendar':     return <AcademicCalendar profile={profile} />
     case 'notices':      return <NoticeBoard profile={profile} />
@@ -158,16 +162,9 @@ export default function App() {
         ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0`}>
 
         {/* Brand */}
-        <div className="p-6 border-b border-white/10">
-          <div className="flex items-center space-x-3">
-            <div className="p-6 flex flex-col items-center">
-          <div className="w-16 h-16 bg-white/10 rounded-[1.5rem] flex items-center justify-center mb-4 ring-1 ring-white/20">
-            <GraduationCap className="text-[#EFBE33]" size={32} />
-          </div>
-          <h1 className="text-xl font-black tracking-tighter">NEXUS <span className="text-[#EFBE33]">GIET</span></h1>
-          <p className="text-[10px] font-black text-white/30 uppercase tracking-[0.2em] mt-1">Academic Intelligence</p>
-        </div>
-          </div>
+        <div className="p-8 border-b border-white/10 text-center">
+          <h1 className="text-2xl font-black tracking-tighter">NEXUS <span className="text-[#EFBE33]">GIET</span></h1>
+          <p className="text-[10px] font-black text-white/30 uppercase tracking-[0.3em] mt-1">Institutional Intelligence</p>
         </div>
 
         {/* Nav */}

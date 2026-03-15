@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
-import { ToggleLeft, ToggleRight, Save, User2, MessageSquarePlus, Inbox, Loader2, CheckCircle2, Phone, KeyRound, Send, UserPlus, Mail, Lock, BadgeCheck, Trash2, AlertCircle, BookOpen, BookMarked, Layers, FileSpreadsheet, Download, Upload, ShieldCheck, AlertTriangle, Users, MessageSquare, User } from 'lucide-react'
+import { ToggleLeft, ToggleRight, Save, User2, MessageSquarePlus, Inbox, Loader2, CheckCircle2, Phone, KeyRound, Send, UserPlus, Mail, Lock, BadgeCheck, Trash2, AlertCircle, BookOpen, BookMarked, Layers, FileSpreadsheet, Download, Upload, CloudUpload, ShieldCheck, AlertTriangle, Users, MessageSquare, User } from 'lucide-react'
 
 const BRANCHES = ['CME', 'ECE', 'EEE', 'ME', 'CIVIL', 'AI', 'IT', 'CSE']
 const SECTIONS = ['A', 'B', 'C', 'D']
@@ -16,8 +16,14 @@ const TABS = [
 ]
 
 export default function ManagementSuite({ profile, prefill, onPrefillClear }) {
-  const [activeTab, setActiveTab] = useState(profile?.role === 'student' ? 'profiles' : 'users') // Default to 'users' for non-students, 'profiles' for students
+  const [activeTab, setActiveTab] = useState(prefill?.tab || (profile?.role === 'student' ? 'profiles' : 'users'))
   const [databaseSyncError, setDatabaseSyncError] = useState(null)
+
+  useEffect(() => {
+    if (prefill?.tab) {
+      setActiveTab(prefill.tab)
+    }
+  }, [prefill])
 
   useEffect(() => {
     // Default to the first allowed tab based on role
