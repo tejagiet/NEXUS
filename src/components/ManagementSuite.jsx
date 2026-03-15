@@ -730,9 +730,9 @@ function AdminUserCreator({ profile, setDatabaseSyncError }) {
           </div>
           <div>
             <label className="block text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1.5">Advanced: Role (Optional)</label>
-            <select value={form.role} onChange={e => set('role', e.target.value)}
+            <select value={form.roles?.[0] || 'student'} onChange={e => set('roles', [e.target.value])}
               className="w-full h-11 border-2 border-gray-100 rounded-xl px-4 text-sm font-bold focus:outline-none focus:border-[#272A6F] bg-white transition-all">
-              {ROLES.map(r => <option key={r} value={r}>{r.charAt(0).toUpperCase() + r.slice(1)}</option>)}
+              {ROLES.map(r => <option key={r} value={r}>{r?.charAt(0).toUpperCase() + r?.slice(1)}</option>)}
             </select>
           </div>
           <div className="md:col-span-2">
@@ -747,7 +747,9 @@ function AdminUserCreator({ profile, setDatabaseSyncError }) {
         <button type="submit" disabled={saving}
           className="w-full h-12 bg-[#272A6F] text-white rounded-xl font-black text-sm flex items-center justify-center space-x-2 hover:shadow-xl hover:-translate-y-0.5 transition-all active:scale-95 disabled:opacity-50">
           {saving ? <Loader2 size={18} className="animate-spin" /> : <UserPlus size={18} />}
-          <span>{saving ? 'Creating Account...' : `Create ${form.role.charAt(0).toUpperCase() + form.role.slice(1)} Account`}</span>
+          <span>
+            {saving ? 'Creating Account...' : `Create ${(form.roles?.[0] || 'student').charAt(0).toUpperCase() + (form.roles?.[0] || 'student').slice(1)} Account`}
+          </span>
         </button>
       </form>
 
