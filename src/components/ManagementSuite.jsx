@@ -419,10 +419,10 @@ function StudentFeedback({ profile }) {
 
 /* ── Admin User Creator ─────────────────────────── */
 function AdminUserCreator({ profile, setDatabaseSyncError }) {
-  const ROLES = ['student', 'faculty', 'admin']
+  const ROLES = ['student', 'faculty', 'admin', 'principal', 'vice_principal', 'hod', 'class_teacher']
   const BRANCHES = ['CME', 'ECE', 'EEE', 'ME', 'CIVIL', 'AI', 'IT', 'CSE']
   const SECTIONS = ['A', 'B', 'C']
-  const blank = { full_name: '', email: '', pin_number: '', branch: 'CME', role: 'student', password: '', section: 'A' }
+  const blank = { full_name: '', email: '', pin_number: '', branch: 'CME', roles: ['student'], password: '', section: 'A' }
 
   const [form, setForm] = useState(blank)
   const [users, setUsers] = useState([])
@@ -571,15 +571,15 @@ function AdminUserCreator({ profile, setDatabaseSyncError }) {
       const finalEmail = form.email.trim().toLowerCase() || `${cleanPin || Date.now()}@nexusgiet.edu.in`
       const { data: authData, error: authErr } = await supabase.auth.signUp({
         email: finalEmail, password: form.password,
-        options: { data: { full_name: form.full_name, role: form.role, pin_number: form.pin_number, branch: form.branch } }
+        options: { data: { full_name: form.full_name, roles: form.roles, pin_number: form.pin_number, branch: form.branch } }
       })
       if (authErr) throw authErr
       const userId = authData.user?.id
       if (userId) {
         await supabase.from('profiles').upsert({
           id: userId, full_name: form.full_name.trim(), email: finalEmail,
-          pin_number: form.pin_number.trim(), branch: form.branch, role: form.role,
-          section: form.role === 'student' ? form.section : null
+          pin_number: form.pin_number.trim(), branch: form.branch, roles: form.roles,
+          section: form.roles.includes('student') ? form.section : null
         }, { onConflict: 'id' })
 
         // 🔗 NEW: Sync to students table for attendance tracking
@@ -964,33 +964,57 @@ function RoleManager({ profile, setDatabaseSyncError }) {
     setLoading(true)
     const { data, error } = await supabase
       .from('profiles')
-      .select('id, full_name, role, pin_number, email')
+      .select('id, full_name, roles, role, pin_number, email')
       .order('full_name', { ascending: true })
     if (error) setDatabaseSyncError(error.message)
     else setUsers(data || [])
     setLoading(false)
   }
 
-  async function updateRole(userId, newRole) {
+  async function updateRoles(userId, newRoles) {
     setUpdating(userId)
     const { error } = await supabase
       .from('profiles')
-      .update({ role: newRole })
+      .update({ roles: newRoles, role: newRoles[0] || 'student' }) // Maintain legacy role for compat
       .eq('id', userId)
 
     if (error) {
-      alert("Failed to update role: " + error.message)
+      alert("Failed to update roles: " + error.message)
     } else {
-      setUsers(prev => prev.map(u => u.id === userId ? { ...u, role: newRole } : u))
+      setUsers(prev => prev.map(u => u.id === userId ? { ...u, roles: newRoles, role: newRoles[0] || 'student' } : u))
     }
     setUpdating(null)
   }
 
-  const filtered = users.filter(u =>
-    u.full_name?.toLowerCase().includes(search.toLowerCase()) ||
-    u.pin_number?.toLowerCase().includes(search.toLowerCase()) ||
-    u.email?.toLowerCase().includes(search.toLowerCase())
-  )
+  async function syncEmail(userId, newEmail) {
+    if (!confirm(`Are you sure you want to change this user's institutional login email to ${newEmail}?\n\nThis will update both their profile and their authentication login.`)) return;
+    
+    setUpdating(userId)
+    const { error } = await supabase.rpc('sync_user_email', { 
+      target_user_id: userId, 
+      new_email: newEmail.trim().toLowerCase() 
+    })
+
+    if (error) {
+      alert("Institutional Sync Failed: " + error.message)
+    } else {
+      setUsers(prev => prev.map(u => u.id === userId ? { ...u, email: newEmail.trim().toLowerCase() } : u))
+      alert("Institutional Email Synced! User can now login with the new email.")
+    }
+    setUpdating(null)
+  }
+
+  const [roleFilter, setRoleFilter] = useState('all')
+
+  const filtered = users.filter(u => {
+    const matchesSearch = u.full_name?.toLowerCase().includes(search.toLowerCase()) ||
+      u.pin_number?.toLowerCase().includes(search.toLowerCase()) ||
+      u.email?.toLowerCase().includes(search.toLowerCase())
+    
+    const matchesRole = roleFilter === 'all' || u.roles?.includes(roleFilter) || u.role === roleFilter
+    
+    return matchesSearch && matchesRole
+  })
 
   const roleColors = {
     admin: 'bg-red-500 text-white',
@@ -1016,15 +1040,30 @@ function RoleManager({ profile, setDatabaseSyncError }) {
         </div>
       </div>
 
-      <div className="relative">
-        <Users className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-        <input
-          type="text"
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          placeholder="Search by Name, PIN or Email..."
-          className="w-full bg-gray-50 border-2 border-gray-100 rounded-2xl py-3.5 pl-12 pr-4 text-sm font-bold focus:outline-none focus:border-[#272A6F] transition-all"
-        />
+      <div className="flex flex-col md:flex-row gap-4">
+        <div className="relative flex-1">
+          <Users className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+          <input
+            type="text"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Search by Name, PIN or Email..."
+            className="w-full bg-gray-50 border-2 border-gray-100 rounded-2xl py-3.5 pl-12 pr-4 text-sm font-bold focus:outline-none focus:border-[#272A6F] transition-all"
+          />
+        </div>
+        <div className="flex items-center space-x-2 bg-gray-50 border-2 border-gray-100 rounded-2xl px-4 py-2">
+          <BadgeCheck size={18} className="text-gray-400" />
+          <select 
+            value={roleFilter} 
+            onChange={e => setRoleFilter(e.target.value)}
+            className="bg-transparent text-sm font-bold text-gray-600 outline-none"
+          >
+            <option value="all">Every Role</option>
+            {ROLES.map(r => (
+              <option key={r} value={r}>{r.replace('_', ' ').toUpperCase()}</option>
+            ))}
+          </select>
+        </div>
       </div>
 
       {loading ? (
@@ -1043,25 +1082,54 @@ function RoleManager({ profile, setDatabaseSyncError }) {
                     <p className="text-[10px] font-mono font-bold text-gray-400">{u.pin_number || u.email}</p>
                   </div>
                 </div>
-                <div className={`text-[10px] font-black px-2 py-1 rounded-md uppercase tracking-wider ${roleColors[u.role] || 'bg-gray-100 text-gray-500'}`}>
-                  {u.role?.replace('_', ' ')}
+                <div className="flex flex-wrap gap-1">
+                  {(u.roles || [u.role]).map(r => (
+                    <div key={r} className={`text-[10px] font-black px-2 py-1 rounded-md uppercase tracking-wider ${roleColors[r] || 'bg-gray-100 text-gray-500'}`}>
+                      {r?.replace('_', ' ')}
+                    </div>
+                  ))}
                 </div>
               </div>
 
-              <div className="pt-4 border-t border-gray-50">
-                <label className="block text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2">Change Institutional Role</label>
-                <div className="flex items-center space-x-2">
-                  <select
-                    value={u.role}
-                    disabled={updating === u.id}
-                    onChange={(e) => updateRole(u.id, e.target.value)}
-                    className="flex-1 bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-[#272A6F] disabled:opacity-50"
-                  >
-                    {ROLES.map(r => (
-                      <option key={r} value={r}>{r.replace('_', ' ').toUpperCase()}</option>
-                    ))}
-                  </select>
-                  {updating === u.id && <Loader2 className="animate-spin text-[#272A6F]" size={16} />}
+              <div className="space-y-4 pt-4 border-t border-gray-50">
+                <div>
+                  <label className="block text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2">Institutional Identity (Login Email)</label>
+                  <div className="flex items-center space-x-2">
+                    <input 
+                      type="email" 
+                      defaultValue={u.email}
+                      onBlur={(e) => {
+                        if (e.target.value !== u.email) syncEmail(u.id, e.target.value)
+                      }}
+                      className="flex-1 bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-[#272A6F]"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2">Assign Additional Roles</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {ROLES.map(r => {
+                      const active = (u.roles || [u.role]).includes(r)
+                      return (
+                        <button
+                          key={r}
+                          onClick={() => {
+                            const current = u.roles || [u.role]
+                            const next = active ? current.filter(x => x !== r) : [...current, r]
+                            if (next.length === 0) return // Must have at least one
+                            updateRoles(u.id, next)
+                          }}
+                          className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-tighter transition-all border-2 flex items-center justify-between ${
+                            active ? 'bg-[#272A6F] text-white border-[#272A6F]' : 'bg-white text-gray-400 border-gray-100'
+                          }`}
+                        >
+                          <span>{r.replace('_', ' ')}</span>
+                          {active && <BadgeCheck size={12} />}
+                        </button>
+                      )
+                    })}
+                  </div>
                 </div>
               </div>
             </div>

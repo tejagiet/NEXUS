@@ -76,8 +76,9 @@ MENU.hod = MENU.admin
 MENU.class_teacher = MENU.faculty
 
 function RoleView({ tab, profile, prefill, onPrefillClear, setTab }) {
-  const isFaculty = profile?.role === 'faculty' || profile?.role === 'class_teacher'
-  const isAdmin = ['admin', 'principal', 'vice_principal', 'hod'].includes(profile?.role)
+  const userRoles = profile?.roles || [profile?.role] || []
+  const isFaculty = userRoles.some(r => r === 'faculty' || r === 'class_teacher')
+  const isAdmin = userRoles.some(r => ['admin', 'principal', 'vice_principal', 'hod'].includes(r))
 
   switch (tab) {
     case 'dashboard':    
@@ -143,7 +144,22 @@ export default function App() {
   if (!session) return <Auth />
   if (needsMFA) return <MFAVerify onVerify={() => setNeedsMFA(false)} />
 
-  const menu = MENU[profile?.role] || []
+  // 🏛️ Multi-Role Menu Aggregation
+  const userRoles = profile?.roles || [profile?.role] || []
+  const aggregatedMenu = []
+  const seenIds = new Set()
+
+  userRoles.forEach(role => {
+    (MENU[role] || []).forEach(item => {
+      if (!seenIds.has(item.id)) {
+        aggregatedMenu.push(item)
+        seenIds.add(item.id)
+      }
+    })
+  })
+
+  // Sort by original priority if needed, but here we just keep the order of roles
+  const menu = aggregatedMenu.length > 0 ? aggregatedMenu : (MENU.student) // Fallback
 
   return (
     <div className="min-h-screen bg-gray-50 flex">
@@ -170,7 +186,7 @@ export default function App() {
         {/* Nav */}
         <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
           <p className="text-[10px] text-white/30 uppercase tracking-widest px-3 mb-3">
-            {profile?.role || 'Loading'} Portal
+            {profile?.roles?.join(' & ') || profile?.role || 'Loading'} Portal
           </p>
           {menu.map(item => (
             <button
