@@ -14,15 +14,21 @@ import MFAVerify from './components/MFAVerify'
 import ManagementSuite from './components/ManagementSuite'
 import SmartTimetable from './components/SmartTimetable'
 import BatchFees from './components/BatchFees'
+import AcademicCalendar from './components/AcademicCalendar'
+import NoticeBoard from './components/NoticeBoard'
+import CommunityHub from './components/CommunityHub'
 import {
   LayoutDashboard, LogOut, User, ClipboardList, Wallet, Camera,
-  GraduationCap, BookOpen, ShieldCheck, Settings, Menu, X, MessageSquare, Calendar, Layers
+  GraduationCap, BookOpen, ShieldCheck, Settings, Menu, X, MessageSquare, Calendar, Layers, Megaphone
 } from 'lucide-react'
 
 const MENU = {
   student: [
     { id: 'dashboard', label: 'My Dashboard',  icon: LayoutDashboard },
     { id: 'timetable', label: 'Timetable',     icon: Calendar },
+    { id: 'calendar',  label: 'Academic Cal',  icon: ClipboardList },
+    { id: 'notices',   label: 'Circulars',     icon: Megaphone },
+    { id: 'social',    label: 'Community Hub', icon: Users },
     { id: 'sbtet',     label: 'SBTET Results', icon: GraduationCap },
     { id: 'fees',      label: 'Finance',        icon: Wallet },
     { id: 'lms',       label: 'Resources',      icon: BookOpen },
@@ -31,6 +37,9 @@ const MENU = {
   faculty: [
     { id: 'register',  label: 'Digital Register', icon: ClipboardList },
     { id: 'timetable', label: 'Class Timetable', icon: Calendar },
+    { id: 'calendar',  label: 'Calendar',        icon: ClipboardList },
+    { id: 'notices',   label: 'Circulars',       icon: Megaphone },
+    { id: 'social',    label: 'Community Hub',   icon: Users },
     { id: 'classresults', label: 'Class Results', icon: GraduationCap },
     { id: 'lms',       label: 'Upload Resources', icon: BookOpen },
     { id: 'fees',      label: 'My Finance',       icon: Wallet },
@@ -42,6 +51,9 @@ const MENU = {
     { id: 'dashboard',    label: 'Overview',       icon: LayoutDashboard },
     { id: 'timetable',    label: 'Global Schedule',icon: Calendar },
     { id: 'register',     label: 'Attendance',     icon: ClipboardList },
+    { id: 'calendar',     label: 'Academic Cal',   icon: ClipboardList },
+    { id: 'notices',      label: 'Broadcast',       icon: Megaphone },
+    { id: 'social',       label: 'Nexus Social',    icon: Users },
     { id: 'classresults', label: 'Class Results',  icon: GraduationCap },
     { id: 'batchfees',    label: 'Finance Batch',  icon: Wallet },
     { id: 'cctv',         label: 'CCTV Monitor',   icon: Camera },
@@ -71,6 +83,9 @@ function RoleView({ tab, profile, prefill, onPrefillClear }) {
     case 'mfa':          return <MFASetup profile={profile} />
     case 'mgmt':         return <ManagementSuite profile={profile} prefill={prefill} onPrefillClear={onPrefillClear} />
     case 'timetable':    return <SmartTimetable profile={profile} onMarkAttendance={(subId) => onPrefillClear(subId)} />
+    case 'calendar':     return <AcademicCalendar profile={profile} />
+    case 'notices':      return <NoticeBoard profile={profile} />
+    case 'social':       return <CommunityHub profile={profile} />
     default:             return null
   }
 }

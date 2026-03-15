@@ -11,11 +11,12 @@ export default function ManagementSuite({ profile, prefill, onPrefillClear }) {
   const [databaseSyncError, setDatabaseSyncError] = useState(null)
   const tabs = [
     { id: 'register', label: 'Digital Register', icon: ToggleRight },
-    { id: 'profiles', label: 'Profile Editor',   icon: User2 },
-    { id: 'feedback', label: 'Nexus Inbox',       icon: Inbox },
+    { id: 'profiles', label: 'Profile Editor', icon: User2 },
+    { id: 'feedback', label: 'Nexus Inbox', icon: Inbox },
     ...(profile?.role === 'admin' ? [
       { id: 'users', label: 'User Creator', icon: UserPlus },
       { id: 'subjects', label: 'Subject Manager', icon: BookMarked },
+      { id: 'curriculum', label: 'Curriculum', icon: Layers },
       { id: 'roles', label: 'Role Manager', icon: KeyRound }
     ] : []),
   ]
@@ -38,19 +39,19 @@ export default function ManagementSuite({ profile, prefill, onPrefillClear }) {
         <div className="flex bg-gray-100 p-1 rounded-2xl border border-gray-200 shadow-inner">
           {[
             { id: 'register', label: 'Attendance', icon: ToggleRight },
-            { id: 'users',    label: 'Accounts',   icon: Users },
-            { id: 'roles',    label: 'Roles',      icon: KeyRound },
-            { id: 'subjects', label: 'Subjects',   icon: BookOpen },
-            { id: 'feedback', label: 'Feedback',   icon: MessageSquare },
+            { id: 'users', label: 'Accounts', icon: Users },
+            { id: 'roles', label: 'Roles', icon: KeyRound },
+            { id: 'curriculum', label: 'Syllabus', icon: Layers },
+            { id: 'subjects', label: 'Subjects', icon: BookOpen },
+            { id: 'feedback', label: 'Feedback', icon: MessageSquare },
           ].map(t => (
             <button
               key={t.id}
               onClick={() => setActiveTab(t.id)}
-              className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-xs font-black transition-all ${
-                activeTab === t.id 
-                  ? 'bg-white text-[#272A6F] shadow-lg scale-105' 
+              className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-xs font-black transition-all ${activeTab === t.id
+                  ? 'bg-white text-[#272A6F] shadow-lg scale-105'
                   : 'text-gray-400 hover:text-gray-600'
-              }`}
+                }`}
             >
               <t.icon size={14} />
               <span>{t.label}</span>
@@ -73,9 +74,10 @@ export default function ManagementSuite({ profile, prefill, onPrefillClear }) {
         {activeTab === 'register' && <DigitalRegister profile={profile} prefill={prefill} onPrefillClear={onPrefillClear} setDatabaseSyncError={setDatabaseSyncError} />}
         {activeTab === 'profiles' && <ProfileEditor profile={profile} />}
         {activeTab === 'feedback' && <FeedbackInbox profile={profile} />}
-        {activeTab === 'users'    && <AdminUserCreator profile={profile} setDatabaseSyncError={setDatabaseSyncError} />}
+        {activeTab === 'users' && <AdminUserCreator profile={profile} setDatabaseSyncError={setDatabaseSyncError} />}
         {activeTab === 'subjects' && <SubjectManager profile={profile} setDatabaseSyncError={setDatabaseSyncError} />}
-        {activeTab === 'roles'    && <RoleManager profile={profile} setDatabaseSyncError={setDatabaseSyncError} />}
+        {activeTab === 'roles' && <RoleManager profile={profile} setDatabaseSyncError={setDatabaseSyncError} />}
+        {activeTab === 'curriculum' && <CurriculumManager profile={profile} setDatabaseSyncError={setDatabaseSyncError} />}
       </div>
     </div>
   )
@@ -83,27 +85,29 @@ export default function ManagementSuite({ profile, prefill, onPrefillClear }) {
 
 /* ── Digital Register ─────────────────────────────── */
 function DigitalRegister({ profile, prefill, onPrefillClear, setDatabaseSyncError }) {
-  const [students,   setStudents]   = useState([])
-  const [subjects,   setSubjects]   = useState([])
-  const [subject,    setSubject]    = useState('')
-  const [section,    setSection]    = useState('A')
-  const [marks,      setMarks]      = useState({}) // { studentId: 'present'|'absent' }
-  const [loading,    setLoading]    = useState(true)
-  const [saving,     setSaving]     = useState(false)
-  const [saved,      setSaved]      = useState(false)
+  const [students, setStudents] = useState([])
+  const [subjects, setSubjects] = useState([])
+  const [subject, setSubject] = useState('')
+  const [section, setSection] = useState('A')
+  const [date, setDate] = useState(new Date().toISOString().split('T')[0])
+  const [topic, setTopic] = useState('')
+  const [marks, setMarks] = useState({}) // { studentId: 'present'|'absent' }
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
 
   useEffect(() => {
     async function load() {
       // Defensive check for prefill which may cause ReferenceErrors if props aren't tracked correctly
       const localPrefill = (typeof prefill !== 'undefined') ? prefill : null;
-      const localOnPrefillClear = (typeof onPrefillClear === 'function') ? onPrefillClear : () => {};
+      const localOnPrefillClear = (typeof onPrefillClear === 'function') ? onPrefillClear : () => { };
 
       try {
         const [{ data: stu, error: stuErr }, { data: sub, error: subErr }] = await Promise.all([
           supabase.from('students').select('id,full_name,pin_number,section,branch').order('pin_number', { ascending: true }),
           supabase.from('subjects').select('*')
         ])
-        
+
         if (stuErr || subErr) throw (stuErr || subErr)
 
         setStudents(stu || [])
@@ -130,7 +134,7 @@ function DigitalRegister({ profile, prefill, onPrefillClear, setDatabaseSyncErro
     // 🔄 Auto-Refresh
     const c1 = supabase.channel('reg_stu').on('postgres_changes', { event: '*', schema: 'public', table: 'students' }, () => load()).subscribe()
     const c2 = supabase.channel('reg_sub').on('postgres_changes', { event: '*', schema: 'public', table: 'subjects' }, () => load()).subscribe()
-    
+
     return () => { supabase.removeChannel(c1); supabase.removeChannel(c2) }
   }, [])
 
@@ -145,22 +149,22 @@ function DigitalRegister({ profile, prefill, onPrefillClear, setDatabaseSyncErro
     setSaving(true); setSaved(false)
     const rows = Object.entries(marks).map(([student_id, status]) => ({
       student_id, subject_id: subject, status,
-      marked_by: profile.id, date: new Date().toISOString().split('T')[0]
+      marked_by: profile.id, date, topic
     }))
     try {
       const { error: upsertErr } = await supabase.from('attendance').upsert(rows, { onConflict: 'student_id,subject_id,date' })
       if (upsertErr) throw upsertErr
-      setSaving(false); setSaved(true)
+      setSaving(false); setSaved(true); setTopic('')
       setTimeout(() => setSaved(false), 3000)
     } catch (err) {
       console.error("Attendance Sync Critical Error:", err)
       setSaving(false)
-      
-      const isConflict = 
-        err.status === 409 || 
-        err.code === '42P10' || 
-        err.code === '23505' || 
-        err.message?.toLowerCase().includes('conflict') || 
+
+      const isConflict =
+        err.status === 409 ||
+        err.code === '42P10' ||
+        err.code === '23505' ||
+        err.message?.toLowerCase().includes('conflict') ||
         err.message?.toLowerCase().includes('on_conflict');
 
       const isIntegrityError =
@@ -171,7 +175,7 @@ function DigitalRegister({ profile, prefill, onPrefillClear, setDatabaseSyncErro
       if (isConflict) {
         const msg = "ATTENDANCE CONFLICT (409): Database unique constraint is missing.\n\nPlease run the 'attendance_fix.sql' script in your Supabase SQL Editor to solve this instantly."
         setDatabaseSyncError(msg)
-        window.alert(msg) 
+        window.alert(msg)
       } else if (isIntegrityError) {
         const msg = "DATABASE INTEGRITY ERROR (23503): Attendance links are broken.\n\nPlease run the UPDATED 'attendance_fix.sql' script (v4) to repair your database links."
         setDatabaseSyncError(msg)
@@ -187,7 +191,9 @@ function DigitalRegister({ profile, prefill, onPrefillClear, setDatabaseSyncErro
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex space-x-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <input type="date" value={date} onChange={e => setDate(e.target.value)}
+            className="border bg-white border-gray-200 rounded-xl px-4 py-2 text-sm focus:ring-2 focus:ring-[#272A6F] outline-none" />
           <select value={subject} onChange={e => setSubject(e.target.value)}
             className="border bg-white border-gray-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#272A6F]">
             {subjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
@@ -197,16 +203,20 @@ function DigitalRegister({ profile, prefill, onPrefillClear, setDatabaseSyncErro
             {['A', 'B', 'C'].map(s => <option key={s} value={s}>Section {s}</option>)}
           </select>
         </div>
+        <div className="flex-1 min-w-[200px]">
+          <input type="text" value={topic} onChange={e => setTopic(e.target.value)} placeholder="Lesson Topic (e.g. Intro to React)"
+            className="w-full border bg-white border-gray-100 rounded-xl px-4 py-2 text-sm focus:ring-2 focus:ring-[#272A6F] outline-none font-medium" />
+        </div>
         <div className="flex space-x-2">
-          <button onClick={() => markAll('present')} className="px-3 py-2 text-xs font-bold bg-green-100 text-green-700 rounded-xl hover:bg-green-200 transition-colors">All Present</button>
-          <button onClick={() => markAll('absent')} className="px-3 py-2 text-xs font-bold bg-red-100 text-red-700 rounded-xl hover:bg-red-200 transition-colors">All Absent</button>
+          <button onClick={() => markAll('present')} className="px-3 py-2 text-xs font-bold bg-green-100 text-green-700 rounded-xl hover:bg-green-200 transition-colors">All P</button>
+          <button onClick={() => markAll('absent')} className="px-3 py-2 text-xs font-bold bg-red-100 text-red-700 rounded-xl hover:bg-red-200 transition-colors">All A</button>
         </div>
       </div>
       <div className="space-y-2">
         {(() => {
           const selectedSub = subjects.find(s => s.id === subject)
           const filtered = students.filter(s => s.section === section && s.branch === selectedSub?.branch)
-          
+
           if (filtered.length === 0) return (
             <div className="text-center py-10 text-gray-400 bg-gray-50 rounded-2xl border-2 border-dashed border-gray-100">
               <p className="text-sm font-bold">No students found in {selectedSub?.branch || ''} Section {section}</p>
@@ -215,7 +225,7 @@ function DigitalRegister({ profile, prefill, onPrefillClear, setDatabaseSyncErro
 
           return filtered.map(s => {
             const present = marks[s.id] === 'present'
-            const absent  = marks[s.id] === 'absent'
+            const absent = marks[s.id] === 'absent'
             return (
               <div key={s.id} className={`flex items-center justify-between p-4 rounded-2xl border transition-all ${present ? 'bg-green-50 border-green-200' : absent ? 'bg-red-50 border-red-200' : 'bg-gray-50 border-gray-200'}`}>
                 <div className="flex items-center space-x-3">
@@ -232,7 +242,7 @@ function DigitalRegister({ profile, prefill, onPrefillClear, setDatabaseSyncErro
                 <button onClick={() => toggle(s.id)} className="transition-all">
                   {present
                     ? <ToggleRight size={36} className="text-green-500" />
-                    : <ToggleLeft  size={36} className={absent ? 'text-red-400' : 'text-gray-300'} />}
+                    : <ToggleLeft size={36} className={absent ? 'text-red-400' : 'text-gray-300'} />}
                 </button>
               </div>
             )
@@ -250,14 +260,14 @@ function DigitalRegister({ profile, prefill, onPrefillClear, setDatabaseSyncErro
 
 /* ── Profile Editor ───────────────────────────────── */
 function ProfileEditor({ profile }) {
-  const [students,  setStudents]  = useState([])
-  const [selected,  setSelected]  = useState(null)
-  const [mobile,    setMobile]    = useState('')
-  const [saving,    setSaving]    = useState(false)
-  const [saved,     setSaved]     = useState(false)
+  const [students, setStudents] = useState([])
+  const [selected, setSelected] = useState(null)
+  const [mobile, setMobile] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
 
   useEffect(() => {
-    supabase.from('profiles').select('*').eq('role','student').then(({ data }) => setStudents(data || []))
+    supabase.from('profiles').select('*').eq('role', 'student').then(({ data }) => setStudents(data || []))
   }, [])
 
   function selectStudent(s) {
@@ -312,7 +322,7 @@ function ProfileEditor({ profile }) {
 /* ── Feedback Inbox ───────────────────────────────── */
 function FeedbackInbox({ profile }) {
   const [feedbacks, setFeedbacks] = useState([])
-  const [loading,   setLoading]   = useState(true)
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     supabase.from('feedback').select('*, profiles(full_name,pin_number)').order('created_at', { ascending: false })
@@ -352,8 +362,8 @@ function StudentFeedback({ profile }) {
   const [subject, setSubject] = useState('')
   const [message, setMessage] = useState('')
   const [sending, setSending] = useState(false)
-  const [sent,    setSent]    = useState(false)
-  const [error,   setError]   = useState(null)
+  const [sent, setSent] = useState(false)
+  const [error, setError] = useState(null)
 
   async function submitFeedback(e) {
     e.preventDefault()
@@ -388,7 +398,7 @@ function StudentFeedback({ profile }) {
           <select value={subject} onChange={e => setSubject(e.target.value)} required
             className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#272A6F]">
             <option value="">Select a topic...</option>
-            {['Academic Concern','Faculty Feedback','Facility Issue','Hostel Complaint','General Suggestion','Other'].map(o =>
+            {['Academic Concern', 'Faculty Feedback', 'Facility Issue', 'Hostel Complaint', 'General Suggestion', 'Other'].map(o =>
               <option key={o}>{o}</option>)}
           </select>
         </div>
@@ -404,22 +414,22 @@ function StudentFeedback({ profile }) {
           <span>{sending ? 'Sending...' : 'Send to Principal'}</span>
         </button>
       </form>
-```
+      ```
     </div>
   )
 }
 
 /* ── Admin User Creator ─────────────────────────── */
 function AdminUserCreator({ profile, setDatabaseSyncError }) {
-  const ROLES    = ['student', 'faculty', 'admin']
-  const BRANCHES = ['CME','ECE','EEE','ME','CIVIL','AI','IT','CSE']
+  const ROLES = ['student', 'faculty', 'admin']
+  const BRANCHES = ['CME', 'ECE', 'EEE', 'ME', 'CIVIL', 'AI', 'IT', 'CSE']
   const SECTIONS = ['A', 'B', 'C']
-  const blank    = { full_name: '', email: '', pin_number: '', branch: 'CME', role: 'student', password: '', section: 'A' }
+  const blank = { full_name: '', email: '', pin_number: '', branch: 'CME', role: 'student', password: '', section: 'A' }
 
-  const [form,    setForm]    = useState(blank)
-  const [users,   setUsers]   = useState([])
-  const [saving,  setSaving]  = useState(false)
-  const [msg,     setMsg]     = useState(null)
+  const [form, setForm] = useState(blank)
+  const [users, setUsers] = useState([])
+  const [saving, setSaving] = useState(false)
+  const [msg, setMsg] = useState(null)
   const [loading, setLoading] = useState(true)
   const [importing, setImporting] = useState(false)
   const [results, setResults] = useState(null)
@@ -438,7 +448,7 @@ function AdminUserCreator({ profile, setDatabaseSyncError }) {
   const handleFileUpload = async (e) => {
     const file = e.target.files[0]
     if (!file) return
-    
+
     setImporting(true)
     setError(null)
     setResults(null)
@@ -452,17 +462,17 @@ function AdminUserCreator({ profile, setDatabaseSyncError }) {
           .map(row => {
             const cols = row.split(',').map(s => s?.trim())
             if (cols.length < 2) return null // Need at least PIN and Name
-            
+
             const [pin, name, branch, password] = cols
             if (!pin || !name) return null
-            
+
             const finalEmail = `${pin.toLowerCase()}@nexusgiet.edu.in`
-            return { 
-              pin_number: pin, 
-              full_name: name, 
-              branch: branch || 'CME', 
+            return {
+              pin_number: pin,
+              full_name: name,
+              branch: branch || 'CME',
               password: password || 'GIET@2026',
-              email: finalEmail 
+              email: finalEmail
             }
           })
           .filter(Boolean)
@@ -477,13 +487,13 @@ function AdminUserCreator({ profile, setDatabaseSyncError }) {
         if (funcError) {
           console.error("Edge Function Error details:", funcError)
           let errorMsg = funcError.message || "Request failed."
-          
+
           if (errorMsg.includes("401") || errorMsg.includes("Unauthorized")) {
             errorMsg = "Unauthorized (401): Missing Service Role Key. Please add the 'SUPABASE_SERVICE_ROLE_KEY' secret in the Supabase Dashboard > Functions > Settings."
           } else if (errorMsg.includes("404")) {
             errorMsg = "404 Not Found: Edge Function not deployed. Run 'supabase functions deploy batch-user-creator' in your terminal."
           }
-          
+
           throw new Error(`Edge Function: ${errorMsg}`)
         }
         setResults(data.results)
@@ -496,7 +506,7 @@ function AdminUserCreator({ profile, setDatabaseSyncError }) {
     reader.readAsText(file)
   }
 
-  useEffect(() => { 
+  useEffect(() => {
     fetchUsers()
     const channel = supabase.channel('user_changes').on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, () => fetchUsers()).subscribe()
     return () => { supabase.removeChannel(channel) }
@@ -519,13 +529,13 @@ function AdminUserCreator({ profile, setDatabaseSyncError }) {
         .select('id,full_name,email,role,pin_number,branch,section')
         .order('created_at', { ascending: false })
         .limit(80)
-      
+
       if (fetchErr) throw fetchErr
       setUsers(data || [])
       setDatabaseSyncError(null)
     } catch (err) {
       console.error("Fetch Users Error:", err.message)
-      
+
       // Notify user about missing columns specifically
       if (err.message.includes('email') || err.message.includes('section') || err.message.includes('400')) {
         setDatabaseSyncError("DATABASE OUT OF SYNC: You are missing columns (email/section) in your 'profiles' table. Please run the nexus_repair.sql script in Supabase SQL Editor.")
@@ -538,7 +548,7 @@ function AdminUserCreator({ profile, setDatabaseSyncError }) {
           .select('id,full_name,role,pin_number,branch')
           .order('created_at', { ascending: false })
           .limit(80)
-          
+
         setUsers(fallbackData || [])
       } catch (fallbackErr) {
         setUsers([])
@@ -769,7 +779,7 @@ function SubjectManager({ profile, setDatabaseSyncError }) {
   const [saving, setSaving] = useState(false)
   const [msg, setMsg] = useState(null)
 
-  useEffect(() => { 
+  useEffect(() => {
     fetchData()
     const channel = supabase.channel('subject_changes').on('postgres_changes', { event: '*', schema: 'public', table: 'subjects' }, () => fetchData()).subscribe()
     return () => { supabase.removeChannel(channel) }
@@ -782,9 +792,9 @@ function SubjectManager({ profile, setDatabaseSyncError }) {
         supabase.from('subjects').select('*, profiles(full_name)').order('branch', { ascending: true }),
         supabase.from('profiles').select('id, full_name').eq('role', 'faculty')
       ])
-      
+
       if (subErr || facErr) throw (subErr || facErr)
-      
+
       setSubjects(sub || [])
       setFaculty(fac || [])
       setDatabaseSyncError(null)
@@ -815,7 +825,7 @@ function SubjectManager({ profile, setDatabaseSyncError }) {
       }, { onConflict: 'code' })
 
       if (error) throw error
-      
+
       setMsg({ type: 'success', text: `✅ Subject "${form.name}" saved successfully!` })
       setForm(blank)
       await fetchData()
@@ -963,7 +973,7 @@ function RoleManager({ profile, setDatabaseSyncError }) {
       .from('profiles')
       .update({ role: newRole })
       .eq('id', userId)
-    
+
     if (error) {
       alert("Failed to update role: " + error.message)
     } else {
@@ -972,7 +982,7 @@ function RoleManager({ profile, setDatabaseSyncError }) {
     setUpdating(null)
   }
 
-  const filtered = users.filter(u => 
+  const filtered = users.filter(u =>
     u.full_name?.toLowerCase().includes(search.toLowerCase()) ||
     u.pin_number?.toLowerCase().includes(search.toLowerCase()) ||
     u.email?.toLowerCase().includes(search.toLowerCase())
@@ -1004,9 +1014,9 @@ function RoleManager({ profile, setDatabaseSyncError }) {
 
       <div className="relative">
         <Users className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-        <input 
-          type="text" 
-          value={search} 
+        <input
+          type="text"
+          value={search}
           onChange={e => setSearch(e.target.value)}
           placeholder="Search by Name, PIN or Email..."
           className="w-full bg-gray-50 border-2 border-gray-100 rounded-2xl py-3.5 pl-12 pr-4 text-sm font-bold focus:outline-none focus:border-[#272A6F] transition-all"
@@ -1033,12 +1043,12 @@ function RoleManager({ profile, setDatabaseSyncError }) {
                   {u.role?.replace('_', ' ')}
                 </div>
               </div>
-              
+
               <div className="pt-4 border-t border-gray-50">
                 <label className="block text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2">Change Institutional Role</label>
                 <div className="flex items-center space-x-2">
-                  <select 
-                    value={u.role} 
+                  <select
+                    value={u.role}
                     disabled={updating === u.id}
                     onChange={(e) => updateRole(u.id, e.target.value)}
                     className="flex-1 bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-[#272A6F] disabled:opacity-50"
@@ -1054,6 +1064,138 @@ function RoleManager({ profile, setDatabaseSyncError }) {
           ))}
         </div>
       )}
+    </div>
+  )
+}
+/* ── Curriculum Manager ───────────────────────────── */
+function CurriculumManager({ profile, setDatabaseSyncError }) {
+  const [subjects, setSubjects] = useState([])
+  const [topics, setTopics] = useState([])
+  const [selectedSub, setSelectedSub] = useState('')
+  const [newTopic, setNewTopic] = useState({ title: '', description: '' })
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    fetchData()
+  }, [])
+
+  useEffect(() => {
+    if (selectedSub) fetchTopics(selectedSub)
+  }, [selectedSub])
+
+  async function fetchData() {
+    const { data, error } = await supabase.from('subjects').select('*').order('name')
+    if (error) setDatabaseSyncError(error.message)
+    else {
+      setSubjects(data || [])
+      if (data?.length) setSelectedSub(data[0].id)
+    }
+    setLoading(false)
+  }
+
+  async function fetchTopics(subId) {
+    const { data, error } = await supabase.from('curriculum').select('*').eq('subject_id', subId).order('order_index')
+    if (error) setDatabaseSyncError(error.message)
+    else setTopics(data || [])
+  }
+
+  async function addTopic() {
+    if (!newTopic.title) return
+    setSaving(true)
+    const { error } = await supabase.from('curriculum').insert({
+      subject_id: selectedSub,
+      title: newTopic.title,
+      description: newTopic.description,
+      order_index: topics.length
+    })
+    if (error) alert(error.message)
+    else {
+      setNewTopic({ title: '', description: '' })
+      fetchTopics(selectedSub)
+    }
+    setSaving(false)
+  }
+
+  async function toggleComplete(id, current) {
+    await supabase.from('curriculum').update({ is_completed: !current }).eq('id', id)
+    setTopics(t => t.map(x => x.id === id ? { ...x, is_completed: !current } : x))
+  }
+
+  if (loading) return <div className="flex justify-center py-12"><Loader2 className="animate-spin text-[#272A6F]" /></div>
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center space-x-3">
+        <div className="w-10 h-10 bg-[#272A6F] rounded-xl flex items-center justify-center text-white shadow-lg">
+          <Layers size={20} />
+        </div>
+        <div>
+          <h3 className="text-lg font-black text-[#272A6F]">Curriculum Manager</h3>
+          <p className="text-xs text-gray-400 font-bold uppercase tracking-widest">Define subject syllabi and track completion</p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="md:col-span-1 space-y-4">
+          <label className="block text-[10px] font-black uppercase tracking-widest text-gray-400">Select Subject</label>
+          <div className="space-y-2 max-h-[400px] overflow-y-auto pr-2">
+            {subjects.map(s => (
+              <button key={s.id} onClick={() => setSelectedSub(s.id)}
+                className={`w-full text-left p-4 rounded-2xl border transition-all ${selectedSub === s.id ? 'bg-[#272A6F] text-white border-[#272A6F] shadow-lg scale-[1.02]' : 'bg-gray-50 text-gray-600 border-gray-100 hover:bg-gray-100'}`}>
+                <p className="font-bold text-sm leading-tight">{s.name}</p>
+                <p className={`text-[10px] font-mono mt-1 ${selectedSub === s.id ? 'text-white/60' : 'text-gray-400'}`}>{s.code}</p>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="md:col-span-2 space-y-6">
+          <div className="glass rounded-3xl p-6 space-y-4 border-2 border-dashed border-[#272A6F]/10">
+            <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">Add New Topic</p>
+            <div className="grid grid-cols-1 gap-4">
+              <input value={newTopic.title} onChange={e => setNewTopic({ ...newTopic, title: e.target.value })}
+                placeholder="Topic Title (e.g. Unit 1: Introduction)"
+                className="w-full h-11 bg-white border-2 border-gray-100 rounded-xl px-4 text-sm font-bold focus:border-[#272A6F] outline-none transition-all" />
+              <textarea value={newTopic.description} onChange={e => setNewTopic({ ...newTopic, description: e.target.value })}
+                placeholder="Brief description or objectives..." rows={2}
+                className="w-full bg-white border-2 border-gray-100 rounded-xl px-4 py-2 text-sm font-bold focus:border-[#272A6F] outline-none transition-all resize-none" />
+            </div>
+            <button onClick={addTopic} disabled={saving || !newTopic.title}
+              className="w-full h-11 bg-[#272A6F] text-white rounded-xl font-black text-xs flex items-center justify-center space-x-2 hover:shadow-lg transition-all disabled:opacity-50">
+              {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+              <span>Add to Syllabus</span>
+            </button>
+          </div>
+
+          <div className="space-y-3">
+            <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">Syllabus Overview ({topics.length} topics)</p>
+            {topics.length === 0 ? (
+              <div className="text-center py-12 bg-gray-50 rounded-3xl border-2 border-dashed border-gray-100">
+                <p className="text-gray-400 text-sm font-bold">No topics added yet for this subject.</p>
+              </div>
+            ) : (
+              topics.map((t, idx) => (
+                <div key={t.id} className={`p-4 rounded-2xl border flex items-center justify-between transition-all ${t.is_completed ? 'bg-green-50 border-green-200' : 'bg-white border-gray-100'}`}>
+                  <div className="flex items-center space-x-4">
+                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-black text-xs ${t.is_completed ? 'bg-green-500 text-white' : 'bg-gray-100 text-gray-400'}`}>
+                      {idx + 1}
+                    </div>
+                    <div>
+                      <h5 className={`font-bold text-sm ${t.is_completed ? 'text-green-700' : 'text-[#272A6F]'}`}>{t.title}</h5>
+                      <p className="text-xs text-gray-400">{t.description}</p>
+                    </div>
+                  </div>
+                  <button onClick={() => toggleComplete(t.id, t.is_completed)}
+                    className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${t.is_completed ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-400'}`}>
+                    {t.is_completed ? 'Done ✓' : 'Mark Done'}
+                  </button>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      </div>
     </div>
   )
 }

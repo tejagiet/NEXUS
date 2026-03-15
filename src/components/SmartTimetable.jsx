@@ -119,6 +119,45 @@ export default function SmartTimetable({ profile, onMarkAttendance }) {
         </div>
       </header>
 
+      {/* 🚀 Today's Schedule Card (Student View focus) */}
+      {(!loading && timetable.length > 0) && (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="col-span-full mb-2">
+            <h3 className="text-[10px] font-black uppercase tracking-widest text-[#272A6F] flex items-center space-x-2">
+              <Clock size={12} className="text-[#EFBE33]" />
+              <span>Today's Live Schedule</span>
+            </h3>
+          </div>
+          {(() => {
+            const today = new Date().toLocaleDateString('en-US', { weekday: 'long' })
+            const todaysSlots = timetable.filter(t => t.day === today).sort((a,b) => a.slot - b.slot)
+            
+            if (todaysSlots.length === 0) return (
+              <div className="col-span-full p-6 bg-white border border-dashed border-gray-200 rounded-3xl text-center">
+                <p className="text-gray-400 text-sm font-bold">No classes scheduled for today.</p>
+              </div>
+            )
+
+            return todaysSlots.map(t => (
+              <div key={t.id} className="p-4 bg-white border-2 border-gray-100 rounded-[2rem] shadow-sm hover:shadow-md transition-all border-l-4 border-l-blue-500">
+                <div className="flex justify-between items-start mb-2">
+                  <span className="text-[9px] font-black bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full">Slot {t.slot}</span>
+                  <span className="text-[9px] font-mono font-bold text-gray-400">{SLOT_TIMES[t.slot]}</span>
+                </div>
+                <h4 className="font-bold text-[#272A6F] text-sm leading-tight">{t.subjects?.name}</h4>
+                <p className="text-[9px] text-gray-400 font-mono mt-1">{t.subjects?.code}</p>
+                {isFaculty && (
+                  <button onClick={() => onMarkAttendance(t.subject_id)}
+                    className="mt-3 w-full py-1.5 bg-[#272A6F] text-white rounded-xl text-[10px] font-black hover:bg-blue-600 transition-all">
+                    Start Attendance
+                  </button>
+                )}
+              </div>
+            ))
+          })()}
+        </div>
+      )}
+
       {status && (
         <div className={`p-4 rounded-2xl flex items-center space-x-3 text-sm font-medium border ${status.type === 'success' ? 'bg-green-50 border-green-200 text-green-700' : 'bg-red-50 border-red-200 text-red-700'}`}>
           {status.type === 'success' ? <CheckCircle2 size={18} /> : <AlertCircle size={18} />}
