@@ -151,15 +151,22 @@ function ProfileEditor({ profile }) {
         .from('avatars')
         .upload(fileName, file, { upsert: true })
 
-      if (uploadError) throw uploadError
+      if (uploadError) {
+        if (uploadError.statusCode === "400") throw new Error("Storage Bucket 'avatars' may be missing. Please run storage_repair.sql.")
+        if (uploadError.message?.includes("row-level security")) throw new Error("Security Violation: You don't have permission to update this avatar. Ensure storage_repair.sql was run.")
+        throw uploadError
+      }
 
       const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(fileName)
       setFormData(prev => ({ ...prev, avatar_url: publicUrl }))
       
       // Auto-save the URL to profile
-      await supabase.from('profiles').update({ avatar_url: publicUrl }).eq('id', selected.id)
+      const { error: profileError } = await supabase.from('profiles').update({ avatar_url: publicUrl }).eq('id', selected.id)
+      if (profileError) throw profileError
+
     } catch (err) {
-      alert("Upload failed: " + err.message)
+      console.error("Institutional Asset Error:", err)
+      alert("Institutional Upload Failed: " + err.message)
     } finally {
       setUploading(false)
     }
@@ -971,6 +978,26 @@ function RoleManager({ profile, setDatabaseSyncError }) {
     setLoading(false)
   }
 
+  async function resetPassword(userId, newPassword) {
+    if (!newPassword || newPassword.length < 6) {
+      alert("Password must be at least 6 characters."); return
+    }
+    if (!confirm("Are you sure you want to reset this user's password? This action cannot be undone.")) return;
+
+    setUpdating(userId)
+    const { error } = await supabase.rpc('admin_reset_password', { 
+      target_user_id: userId, 
+      new_password: newPassword 
+    })
+
+    if (error) {
+      alert("Security Reset Failed: " + error.message)
+    } else {
+      alert("Password Reset Successful! User can now login with the new credentials.")
+    }
+    setUpdating(null)
+  }
+
   async function updateRoles(userId, newRoles) {
     setUpdating(userId)
     const { error } = await supabase
@@ -1129,6 +1156,27 @@ function RoleManager({ profile, setDatabaseSyncError }) {
                         </button>
                       )
                     })}
+                  </div>
+                </div>
+
+                <div className="pt-4 border-t border-gray-100">
+                  <label className="block text-[10px] font-black uppercase tracking-widest text-red-500 mb-2">Security Actions</label>
+                  <div className="flex items-center space-x-2">
+                    <input 
+                      type="password"
+                      placeholder="New Password..."
+                      id={`pwd-${u.id}`}
+                      className="flex-1 bg-red-50/30 border border-red-100 rounded-xl px-3 py-2 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-red-500"
+                    />
+                    <button
+                      onClick={() => {
+                        const val = document.getElementById(`pwd-${u.id}`).value
+                        resetPassword(u.id, val)
+                      }}
+                      className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-lg active:scale-95"
+                    >
+                      Reset
+                    </button>
                   </div>
                 </div>
               </div>
