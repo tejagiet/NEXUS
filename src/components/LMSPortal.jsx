@@ -81,8 +81,8 @@ export default function LMSPortal({ profile }) {
 
   async function fetchCurriculum() {
     setLoading(true)
-    let query = supabase.from('curriculum').select('*, subjects(name, code, branch)')
-    if (filter !== 'ALL') query = query.filter('subjects.branch', 'eq', filter)
+    let query = supabase.from('curriculum').select('*, subjects!inner(name, code, branch)')
+    if (filter !== 'ALL') query = query.eq('subjects.branch', filter)
     const { data, error } = await query
     if (!error) setCurriculum(data || [])
     setLoading(false)

@@ -93,7 +93,7 @@ export default function StaffDashboard({ profile }) {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Branch Distribution Chart */}
-        <div className="lg:col-span-2 glass rounded-[2.5rem] p-8 shadow-xl">
+        <div className="lg:col-span-2 glass rounded-[2.5rem] p-8 shadow-xl min-h-[400px]">
           <div className="flex items-center justify-between mb-8">
             <h3 className="font-bold text-[#272A6F] flex items-center space-x-2">
               <BarChart size={20} className="text-[#EFBE33]" />
@@ -103,23 +103,30 @@ export default function StaffDashboard({ profile }) {
               <ArrowUpRight size={18} className="text-gray-400" />
             </button>
           </div>
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <ReBarChart data={branchData}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
-                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 12, fontWeight: 'bold', fill: '#94a3b8' }} />
-                <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#94a3b8' }} />
-                <Tooltip 
-                  cursor={{ fill: 'rgba(39,42,111,0.05)', radius: 10 }}
-                  contentStyle={{ borderRadius: '15px', border: 'none', boxShadow: '0 10px 25px rgba(0,0,0,0.1)' }}
-                />
-                <Bar dataKey="value" radius={[10, 10, 0, 0]} barSize={40}>
-                  {branchData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={index % 2 === 0 ? '#272A6F' : '#EFBE33'} />
-                  ))}
-                </Bar>
-              </ReBarChart>
-            </ResponsiveContainer>
+          
+          <div className="h-72">
+            {!loading && branchData.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%" minHeight={250}>
+                <ReBarChart data={branchData}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
+                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 12, fontWeight: 'bold', fill: '#94a3b8' }} />
+                  <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#94a3b8' }} />
+                  <Tooltip 
+                    cursor={{ fill: 'rgba(39,42,111,0.05)', radius: 10 }}
+                    contentStyle={{ borderRadius: '15px', border: 'none', boxShadow: '0 10px 25px rgba(0,0,0,0.1)' }}
+                  />
+                  <Bar dataKey="value" radius={[10, 10, 0, 0]} barSize={40}>
+                    {branchData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={index % 2 === 0 ? '#272A6F' : '#EFBE33'} />
+                    ))}
+                  </Bar>
+                </ReBarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="h-full flex items-center justify-center border-2 border-dashed border-gray-100 rounded-3xl">
+                <p className="text-gray-400 font-bold text-sm">No branch data available</p>
+              </div>
+            )}
           </div>
         </div>
 

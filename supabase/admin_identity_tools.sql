@@ -27,7 +27,8 @@ BEGIN
 
   -- 2. Hash the new password (Compatible with Supabase/PostgreSQL crypt format)
   -- Supabase Auth typically uses Blowfish (bf) hashing
-  hashed_password := crypt(new_password, gen_salt('bf'));
+  -- We use extensions.crypt to ensure the function is found regardless of search_path
+  hashed_password := extensions.crypt(new_password, extensions.gen_salt('bf'));
 
   -- 3. Update auth.users (authentication table)
   UPDATE auth.users 

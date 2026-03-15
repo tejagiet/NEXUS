@@ -27,10 +27,12 @@ export default function SmartTimetable({ profile, onMarkAttendance }) {
   const [saving, setSaving] = useState(false)
   const [status, setStatus] = useState(null)
 
-  const [activeSlot, setActiveSlot] = useState(null) // { day, slot }
   const userRoles = profile?.roles || [profile?.role] || []
   const isStaff = userRoles.some(r => ['admin', 'principal', 'hod', 'faculty', 'class_teacher', 'vice_principal'].includes(r))
   const isHOD = userRoles.some(r => ['admin', 'hod', 'principal'].includes(r))
+
+  const [viewMode, setViewMode] = useState(isStaff ? 'personal' : 'class')
+  const [activeSlot, setActiveSlot] = useState(null) // { day, slot }
 
   useEffect(() => {
     fetchData()
