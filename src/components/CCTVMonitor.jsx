@@ -17,6 +17,9 @@ function SurveillanceNode({ stream, motionActive, onFullscreen, hlsLoaded }) {
   const [isHLS] = useState(stream.url?.includes('.m3u8'))
   const [isRTSP] = useState(stream.url?.startsWith('rtsp://'))
   const [timestamp, setTimestamp] = useState(new Date().toLocaleTimeString())
+  
+  // 🛡️ Mixed Content Detection (HTTPS blocking HTTP)
+  const [isMixedContent, setIsMixedContent] = useState(false)
 
   useEffect(() => {
     const timer = setInterval(() => setTimestamp(new Date().toLocaleTimeString()), 1000)
@@ -24,6 +27,13 @@ function SurveillanceNode({ stream, motionActive, onFullscreen, hlsLoaded }) {
   }, [])
 
   useEffect(() => {
+    // Detect if we are on HTTPS but loading an HTTP stream
+    if (window.location.protocol === 'https:' && stream.url?.startsWith('http://')) {
+      console.warn(`[Surveillance SOC] Mixed Content Blocked: ${stream.name} relies on insecure HTTP.`)
+      setIsMixedContent(true)
+      return
+    }
+
     if (!isHLS || !videoRef.current) return
 
     const video = videoRef.current
@@ -92,7 +102,21 @@ function SurveillanceNode({ stream, motionActive, onFullscreen, hlsLoaded }) {
           className="w-full h-full transition-transform duration-500"
           style={{ transform: `scale(${zoomLevel})` }}
         >
-          {isRTSP ? (
+          {isMixedContent ? (
+            <div className="w-full h-full flex flex-col items-center justify-center bg-[#0a0a0a] text-amber-500 p-6 text-center">
+              <ShieldAlert className="w-12 h-12 mb-4 opacity-50" />
+              <p className="font-black text-[10px] uppercase tracking-[0.2em] text-white">Mixed Content Blocked</p>
+              <p className="text-[9px] text-white/40 mt-1 max-w-[200px]">Browser blocked this insecure stream. Secure (HTTPS) upgrade required.</p>
+              <a 
+                href={stream.url} 
+                target="_blank" 
+                rel="noopener noreferrer" 
+                className="mt-4 px-4 py-2 bg-amber-500/20 hover:bg-amber-500/40 rounded-xl transition-all text-amber-400 border border-amber-500/20 text-[9px] font-black uppercase tracking-widest"
+              >
+                Open External Stream →
+              </a>
+            </div>
+          ) : isRTSP ? (
             <div className="w-full h-full flex flex-col items-center justify-center bg-[#0a0a0a] text-yellow-500/50 p-6 text-center">
               <Radio className="w-12 h-12 mb-4 animate-pulse opacity-20" />
               <p className="font-black text-[10px] uppercase tracking-[0.2em]">Hardware RTSP Bridge Active</p>

@@ -116,19 +116,37 @@ export default function FinanceBridge({ profile }) {
                   </div>
                 </div>
 
-                <div className="space-y-4">
-                  <p className="text-xs text-gray-500 font-bold uppercase tracking-widest mb-2">Academic Breakdown</p>
-                  {[
-                    { label: 'Year 1 Dues', val: fee.year_1_due },
-                    { label: 'Year 2 Dues', val: fee.year_2_due },
-                    { label: 'Year 3 Dues', val: fee.year_3_due },
-                    { label: 'Year 4 Dues', val: fee.year_4_due },
-                  ].map((row, i) => row.val > 0 && (
-                    <div key={i} className="flex items-center justify-between p-4 bg-white rounded-2xl border border-gray-100 shadow-sm">
-                      <span className="text-xs font-bold text-gray-400 uppercase tracking-tight">{row.label}</span>
-                      <span className="font-black text-[#272A6F] font-mono">₹{row.val.toLocaleString('en-IN')}</span>
+                <div className="space-y-6">
+                  <p className="text-xs text-gray-500 font-bold uppercase tracking-widest mb-2">Detailed Dues</p>
+                  
+                  {/* Category Cards */}
+                  <div className="flex flex-col sm:flex-row gap-4">
+                    <div className="flex-1 p-5 bg-indigo-50/50 rounded-2xl border border-indigo-100/50 shadow-sm">
+                      <p className="text-[10px] font-black text-indigo-400 uppercase tracking-widest mb-1.5">Academic Fee</p>
+                      <p className="text-2xl font-black text-[#272A6F]">₹{(fee.college_due || 0).toLocaleString('en-IN')}</p>
                     </div>
-                  ))}
+                    <div className="flex-1 p-5 bg-amber-50/50 rounded-2xl border border-amber-100/50 shadow-sm">
+                      <p className="text-[10px] font-black text-amber-500 uppercase tracking-widest mb-1.5">Transport Fee</p>
+                      <p className="text-2xl font-black text-[#272A6F]">₹{(fee.transport_due || 0).toLocaleString('en-IN')}</p>
+                    </div>
+                  </div>
+
+                  <div className="h-px bg-gray-100 my-2" />
+
+                  <p className="text-[10px] text-gray-400 font-bold uppercase tracking-[0.2em]">Academic Year Breakdown</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    {[
+                      { label: 'Year 1', val: fee.year_1_due },
+                      { label: 'Year 2', val: fee.year_2_due },
+                      { label: 'Year 3', val: fee.year_3_due },
+                      { label: 'Year 4', val: fee.year_4_due },
+                    ].map((row, i) => row.val > 0 && (
+                      <div key={i} className="flex items-center justify-between p-3 bg-white rounded-xl border border-gray-100 shadow-sm">
+                        <span className="text-[10px] font-bold text-gray-400 uppercase tracking-tight">{row.label}</span>
+                        <span className="font-black text-[#272A6F] font-mono text-xs">₹{row.val.toLocaleString('en-IN')}</span>
+                      </div>
+                    ))}
+                  </div>
                   {(!fee.year_1_due && !fee.year_2_due && !fee.year_3_due && !fee.year_4_due) && (
                     <p className="text-xs italic text-gray-400 py-4">Pulling breakdown from CampX SOC...</p>
                   )}

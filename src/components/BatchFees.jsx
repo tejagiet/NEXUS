@@ -64,6 +64,8 @@ export default function BatchFees({ profile }) {
             pin: st.pin,
             name: data.student || 'Unknown',
             total_fee: data.breakdown.total,
+            college_due: data.breakdown.college,
+            transport_due: data.breakdown.transport,
             y1: data.breakdown.y1,
             y2: data.breakdown.y2,
             y3: data.breakdown.y3,
@@ -101,8 +103,8 @@ export default function BatchFees({ profile }) {
   const highDebtors = results.filter(r => r.total_fee > 50000).length
 
   function downloadCSV() {
-    const header = ['PIN', 'Name', 'Total Due', 'Year 1', 'Year 2', 'Year 3', 'Year 4']
-    const rows = sortedResults.map(r => [r.pin, r.name, r.total_fee, r.y1, r.y2, r.y3, r.y4])
+    const header = ['PIN', 'Name', 'Total Due', 'College Due', 'Transport Due', 'Year 1', 'Year 2', 'Year 3', 'Year 4']
+    const rows = sortedResults.map(r => [r.pin, r.name, r.total_fee, r.college_due, r.transport_due, r.y1, r.y2, r.y3, r.y4])
     const csv = [header, ...rows].map(r => r.join(',')).join('\n')
     const blob = new Blob([csv], { type: 'text/csv' })
     const a = document.createElement('a')
@@ -204,30 +206,36 @@ export default function BatchFees({ profile }) {
       {/* Table */}
       {results.length > 0 && (
         <div className="bg-white rounded-[32px] overflow-hidden shadow-xl border border-gray-100">
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50 border-b border-gray-100">
-              <tr className="text-[#272A6F] text-[10px] font-black uppercase tracking-widest">
-                <th className="px-6 py-4 text-left cursor-pointer" onClick={() => sort('pin')}>PIN</th>
-                <th className="px-6 py-4 text-left cursor-pointer" onClick={() => sort('name')}>Name</th>
-                <th className="px-6 py-4 text-center cursor-pointer" onClick={() => sort('total_fee')}>Total Due</th>
-                <th className="px-6 py-4 text-center">Y1</th>
-                <th className="px-6 py-4 text-center">Y2</th>
-                <th className="px-6 py-4 text-center">Y3</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-50">
-              {sortedResults.map(r => (
-                <tr key={r.pin} className="hover:bg-gray-50 transition-colors">
-                  <td className="px-6 py-4 font-mono font-bold text-gray-400">{r.pin}</td>
-                  <td className="px-6 py-4 font-bold text-[#272A6F]">{r.name}</td>
-                  <td className="px-6 py-4 text-center font-black text-red-600">₹{r.total_fee.toLocaleString()}</td>
-                  <td className="px-6 py-4 text-center text-xs text-gray-500">₹{r.y1.toLocaleString()}</td>
-                  <td className="px-6 py-4 text-center text-xs text-gray-500">₹{r.y2.toLocaleString()}</td>
-                  <td className="px-6 py-4 text-center text-xs text-gray-500">₹{r.y3.toLocaleString()}</td>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 border-b border-gray-100">
+                <tr className="text-[#272A6F] text-[10px] font-black uppercase tracking-widest">
+                  <th className="px-6 py-4 text-left cursor-pointer whitespace-nowrap" onClick={() => sort('pin')}>PIN</th>
+                  <th className="px-6 py-4 text-left cursor-pointer whitespace-nowrap" onClick={() => sort('name')}>Name</th>
+                  <th className="px-6 py-4 text-center cursor-pointer whitespace-nowrap" onClick={() => sort('total_fee')}>Total Due</th>
+                  <th className="px-6 py-4 text-center cursor-pointer whitespace-nowrap" onClick={() => sort('college_due')}>College</th>
+                  <th className="px-6 py-4 text-center cursor-pointer whitespace-nowrap" onClick={() => sort('transport_due')}>Transport</th>
+                  <th className="px-6 py-4 text-center whitespace-nowrap">Y1</th>
+                  <th className="px-6 py-4 text-center whitespace-nowrap">Y2</th>
+                  <th className="px-6 py-4 text-center whitespace-nowrap">Y3</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {sortedResults.map(r => (
+                  <tr key={r.pin} className="hover:bg-gray-50 transition-colors text-xs font-semibold">
+                    <td className="px-6 py-4 font-mono text-gray-400">{r.pin}</td>
+                    <td className="px-6 py-4 text-[#272A6F]">{r.name}</td>
+                    <td className="px-6 py-4 text-center font-black text-red-600">₹{r.total_fee.toLocaleString()}</td>
+                    <td className="px-6 py-4 text-center text-indigo-600 font-bold">₹{(r.college_due || 0).toLocaleString()}</td>
+                    <td className="px-6 py-4 text-center text-amber-600 font-bold">₹{(r.transport_due || 0).toLocaleString()}</td>
+                    <td className="px-6 py-4 text-center text-gray-400">₹{r.y1.toLocaleString()}</td>
+                    <td className="px-6 py-4 text-center text-gray-400">₹{r.y2.toLocaleString()}</td>
+                    <td className="px-6 py-4 text-center text-gray-400">₹{r.y3.toLocaleString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
     </div>

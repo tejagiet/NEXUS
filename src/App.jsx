@@ -33,6 +33,8 @@ const MENU = {
     { id: 'timetable', label: 'Class Timetable', icon: Calendar },
     { id: 'classresults', label: 'Class Results', icon: GraduationCap },
     { id: 'lms',       label: 'Upload Resources', icon: BookOpen },
+    { id: 'fees',      label: 'My Finance',       icon: Wallet },
+    { id: 'batchfees',    label: 'Finance Batch',  icon: Layers },
     { id: 'mgmt',      label: 'Management',       icon: Settings },
     { id: 'mfa',       label: 'Security (2FA)',    icon: ShieldCheck },
   ],

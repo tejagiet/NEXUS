@@ -68,15 +68,32 @@ Deno.serve(async (req: Request) => {
     if (!ledgerRes.ok) throw new Error(`Ledger fetch failed: ${ledgerRes.status}`)
     const ledgerData = await ledgerRes.json()
 
-    // 4. Extract & Map Breakdowns
+    // 4. Extract & Map Breakdowns (Categorized)
     const fees = ledgerData.feeDetails || []
     const breakdown = {
       total: 0,
+      college: 0,
+      transport: 0,
       y1: fees.find((f: any) => f.year === 1)?.yearDue || 0,
       y2: fees.find((f: any) => f.year === 2)?.yearDue || 0,
       y3: fees.find((f: any) => f.year === 3)?.yearDue || 0,
       y4: fees.find((f: any) => f.year === 4)?.yearDue || 0,
     }
+
+    // New Categorical Summation
+    fees.forEach((yearDetail: any) => {
+      const groups = yearDetail.feeGroups || []
+      groups.forEach((group: any) => {
+        const name = group.feeGroup?.name || ''
+        const due = group.due || 0
+        if (name.toLowerCase().includes('transport')) {
+          breakdown.transport += due
+        } else {
+          // Default all others (College, Placement, Exam, etc.) to College Dues
+          breakdown.college += due
+        }
+      })
+    })
     
     breakdown.total = breakdown.y1 + breakdown.y2 + breakdown.y3 + breakdown.y4
 
@@ -96,6 +113,8 @@ Deno.serve(async (req: Request) => {
       await supabase.from('fees').upsert({
         student_id: student.id,
         total_fee: breakdown.total,
+        college_due: breakdown.college,
+        transport_due: breakdown.transport,
         year_1_due: breakdown.y1,
         year_2_due: breakdown.y2,
         year_3_due: breakdown.y3,
