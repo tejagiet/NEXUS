@@ -6,6 +6,8 @@ export default function FacultyRegister({ profile, prefill, onPrefillClear }) {
   const [students,        setStudents]        = useState([])
   const [subjects,        setSubjects]        = useState([])
   const [selectedSubject, setSelectedSubject] = useState('')
+  const [selectedBranch,  setSelectedBranch]  = useState(profile?.branch || 'CME')
+  const [selectedSection, setSelectedSection] = useState('A')
   const [attendanceData,  setAttendanceData]  = useState({})
   const [loading,         setLoading]         = useState(false)
   const [fetching,        setFetching]        = useState(true)
@@ -38,8 +40,18 @@ export default function FacultyRegister({ profile, prefill, onPrefillClear }) {
       setStudents(stuData || [])
 
       if (sub?.length > 0) {
-        setSelectedSubject(prefill?.subjectId || sub[0].id)
+        const initialSubId = prefill?.subjectId || sub[0].id
+        setSelectedSubject(initialSubId)
+        
+        if (prefill?.branch) setSelectedBranch(prefill.branch)
+        else {
+          const s = sub.find(x => x.id === initialSubId)
+          if (s) setSelectedBranch(s.branch)
+        }
+        
+        if (prefill?.section) setSelectedSection(prefill.section)
       }
+      
       if (prefill?.subjectId) {
         onPrefillClear() // Consume the prefill
       }
@@ -200,77 +212,74 @@ export default function FacultyRegister({ profile, prefill, onPrefillClear }) {
               · {Object.values(attendanceData).filter(v => v === 'present').length} marked present
             </span>
           </div>
-          <select value={selectedSubject} onChange={e => setSelectedSubject(e.target.value)}
-            className="bg-white border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#272A6F] font-bold">
-            {subjects.length === 0 && <option>No subjects found</option>}
-            {subjects.map(s => <option key={s.id} value={s.id}>{s.name} ({s.branch})</option>)}
-          </select>
-          {(() => {
-            const sub = subjects.find(x => x.id === selectedSubject)
-            if (!sub) return null
-            return (
-              <div className="flex items-center px-3 py-1.5 bg-[#272A6F]/5 border border-[#272A6F]/10 rounded-xl">
-                <span className="text-[10px] font-black text-[#272A6F] uppercase tracking-widest">{sub.branch}</span>
-              </div>
-            )
-          })()}
+          <div className="flex flex-wrap items-center gap-2">
+            <select value={selectedSubject} onChange={e => {
+              const sid = e.target.value
+              setSelectedSubject(sid)
+              const s = subjects.find(x => x.id === sid)
+              if (s && !prefill?.branch) setSelectedBranch(s.branch)
+            }}
+              className="bg-white border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#272A6F] font-bold">
+              {subjects.length === 0 && <option>No subjects found</option>}
+              {subjects.map(s => <option key={s.id} value={s.id}>{s.name} ({s.branch})</option>)}
+            </select>
+            <select value={selectedBranch} onChange={e => setSelectedBranch(e.target.value)}
+              className="bg-white border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#272A6F] font-bold">
+              {['CME', 'ECE', 'EEE', 'ME', 'CIVIL', 'AI', 'IT', 'CSE'].map(b => <option key={b} value={b}>{b}</option>)}
+            </select>
+            <select value={selectedSection} onChange={e => setSelectedSection(e.target.value)}
+              className="bg-white border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#272A6F] font-bold">
+              {['A', 'B', 'C', 'D'].map(s => <option key={s} value={s}>Sec {s}</option>)}
+            </select>
+          </div>
         </div>
 
         {/* Student table */}
         <div className="overflow-x-auto">
-          {students.length === 0 ? (
-            <div className="p-12 text-center text-gray-400">
-              <Users size={40} className="mx-auto mb-3 opacity-20" />
-              <p>No students found. Students register via the Nexus portal.</p>
-            </div>
-          ) : (
-            <table className="w-full text-left">
-              <thead className="bg-[#272A6F]/5 text-[#272A6F] text-xs uppercase font-bold">
-                <tr>
-                  <th className="px-6 py-4">PIN</th>
-                  <th className="px-6 py-4">Name</th>
-                  <th className="px-6 py-4">Branch</th>
-                  <th className="px-6 py-4 text-center">Mark</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {students.map(student => {
-                  const status = attendanceData[student.id]
-                  return (
-                    <tr key={student.id} className={`transition-colors border-l-4 ${
-                      status === 'present' ? 'bg-green-50 border-green-500' :
-                      status === 'absent'  ? 'bg-red-50 border-red-500'   : 'hover:bg-white/40 border-transparent'}`}>
-                      <td className="px-6 py-3">
-                        <span className="font-black text-[#272A6F] font-mono text-sm px-2 py-1 bg-gray-100 rounded">
-                          {student.pin_number || '—'}
-                        </span>
-                      </td>
-                      <td className="px-6 py-3 font-bold text-gray-800">{student.full_name}</td>
-                      <td className="px-6 py-3 text-sm text-gray-500">{student.branch || '—'}</td>
-                      <td className="px-6 py-3">
-                        <div className="flex justify-center space-x-3">
-                          <button onClick={() => toggleAttendance(student.id, 'present')}
-                            className={`p-2 rounded-full transition-all ${
-                              status === 'present'
-                                ? 'bg-green-500 text-white shadow-lg scale-110'
-                                : 'bg-gray-100 text-gray-400 hover:bg-green-100 hover:text-green-600'}`}>
-                            <CheckCircle2 size={20} />
-                          </button>
-                          <button onClick={() => toggleAttendance(student.id, 'absent')}
-                            className={`p-2 rounded-full transition-all ${
-                              status === 'absent'
-                                ? 'bg-red-500 text-white shadow-lg scale-110'
-                                : 'bg-gray-100 text-gray-400 hover:bg-red-100 hover:text-red-600'}`}>
-                            <XCircle size={20} />
-                          </button>
-                        </div>
+                {(() => {
+                  const filtered = students.filter(s => s.branch === selectedBranch && s.section === selectedSection)
+                  if (filtered.length === 0) return (
+                    <tr>
+                      <td colSpan="4" className="p-12 text-center text-gray-400 italic">
+                        No students found in {selectedBranch} Section {selectedSection}.
                       </td>
                     </tr>
                   )
-                })}
-              </tbody>
-            </table>
-          )}
+                  return filtered.map(student => {
+                    const status = attendanceData[student.id]
+                    return (
+                      <tr key={student.id} className={`transition-colors border-l-4 ${
+                        status === 'present' ? 'bg-green-50 border-green-500' :
+                        status === 'absent'  ? 'bg-red-50 border-red-500'   : 'hover:bg-white/40 border-transparent'}`}>
+                        <td className="px-6 py-3">
+                          <span className="font-black text-[#272A6F] font-mono text-sm px-2 py-1 bg-gray-100 rounded">
+                            {student.pin_number || '—'}
+                          </span>
+                        </td>
+                        <td className="px-6 py-3 font-bold text-gray-800">{student.full_name}</td>
+                        <td className="px-6 py-3 text-sm text-gray-500">{student.branch}-{student.section}</td>
+                        <td className="px-6 py-3">
+                          <div className="flex justify-center space-x-3">
+                            <button onClick={() => toggleAttendance(student.id, 'present')}
+                              className={`p-2 rounded-full transition-all ${
+                                status === 'present'
+                                  ? 'bg-green-500 text-white shadow-lg scale-110'
+                                  : 'bg-gray-100 text-gray-400 hover:bg-green-100 hover:text-green-600'}`}>
+                              <CheckCircle2 size={20} />
+                            </button>
+                            <button onClick={() => toggleAttendance(student.id, 'absent')}
+                              className={`p-2 rounded-full transition-all ${
+                                status === 'absent'
+                                  ? 'bg-red-500 text-white shadow-lg scale-110'
+                                  : 'bg-gray-100 text-gray-400 hover:bg-red-100 hover:text-red-600'}`}>
+                              <XCircle size={20} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  })
+                })()}
         </div>
       </div>
 

@@ -28,34 +28,53 @@ export default function SmartTimetable({ profile, onMarkAttendance }) {
   const [status, setStatus] = useState(null)
 
   const [activeSlot, setActiveSlot] = useState(null) // { day, slot }
+  const [viewMode, setViewMode] = useState(profile?.role === 'student' ? 'class' : 'personal') // 'class' | 'personal'
 
-  const isFaculty = profile?.role === 'faculty' || profile?.role === 'admin'
+  const isStaff = ['admin', 'principal', 'hod', 'faculty', 'class_teacher', 'vice_principal'].includes(profile?.role)
+  const isHOD = ['admin', 'hod', 'principal'].includes(profile?.role)
 
   useEffect(() => {
     fetchData()
 
     // 🔄 Auto-Refresh: Realtime subscription
-    const channel = supabase.channel('timetable_changes')
-      .on('postgres_changes', { 
-        event: '*', 
-        schema: 'public', 
-        table: 'timetables',
-        filter: `branch=eq.${branch}` 
-      }, () => fetchData())
+    const channel = supabase.channel('tt_sync')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'timetable_slots' }, () => fetchData())
       .subscribe()
 
     return () => { supabase.removeChannel(channel) }
-  }, [branch, semester, section])
+  }, [branch, semester, section, viewMode])
 
   async function fetchData() {
     setLoading(true)
-    const [subRes, ttRes] = await Promise.all([
-      supabase.from('subjects').select('*').eq('branch', branch),
-      supabase.from('timetables').select('*, subjects(name, code)').eq('branch', branch).eq('semester', semester).eq('section', section)
-    ])
-    setSubjects(subRes.data || [])
-    setTimetable(ttRes.data || [])
-    setLoading(false)
+    try {
+      if (viewMode === 'personal' && isStaff) {
+        // Fetch all slots where subjects are assigned to this faculty
+        const { data: subAssigns } = await supabase.from('subjects').select('id').eq('faculty_id', profile.id)
+        const subIds = subAssigns?.map(s => s.id) || []
+        
+        const { data: ttData } = await supabase.from('timetable_slots')
+          .select('*, subjects(name, code, branch)')
+          .in('subject_id', subIds)
+        
+        setTimetable(ttData || [])
+        setSubjects([]) // Subjects list only for assignment mode
+      } else {
+        // Fetch specific class schedule
+        const [subRes, ttRes] = await Promise.all([
+          supabase.from('subjects').select('*').eq('branch', branch),
+          supabase.from('timetable_slots').select('*, subjects(name, code, branch)')
+            .eq('branch', branch)
+            .eq('semester', semester)
+            .eq('section', section)
+        ])
+        setSubjects(subRes.data || [])
+        setTimetable(ttRes.data || [])
+      }
+    } catch (err) {
+      console.error("Timetable Fetch Error:", err)
+    } finally {
+      setLoading(false)
+    }
   }
 
   async function assignSubject(subjectId) {
@@ -66,7 +85,7 @@ export default function SmartTimetable({ profile, onMarkAttendance }) {
     // Check conflicts (is faculty already teaching elsewhere at this time?)
     // In a full implementation we'd check across all timetables for this sub's faculty_id
     
-    const { error } = await supabase.from('timetables').upsert({
+    const { error } = await supabase.from('timetable_slots').upsert({
       branch, semester, section, day, slot, subject_id: subjectId
     }, { onConflict: 'branch,semester,section,day,slot' })
 
@@ -83,7 +102,7 @@ export default function SmartTimetable({ profile, onMarkAttendance }) {
 
   async function clearSlot(day, slot) {
     if (!confirm('Clear this slot?')) return
-    await supabase.from('timetables').delete().eq('branch', branch).eq('semester', semester).eq('section', section).eq('day', day).eq('slot', slot)
+    await supabase.from('timetable_slots').delete().eq('branch', branch).eq('semester', semester).eq('section', section).eq('day', day).eq('slot', slot)
     fetchData()
   }
 
@@ -103,19 +122,31 @@ export default function SmartTimetable({ profile, onMarkAttendance }) {
             </span>
           </div>
         </div>
-        <div className="flex items-center space-x-2">
-          <select value={branch} onChange={e => setBranch(e.target.value)} disabled={profile?.role === 'student' && profile?.branch}
-            className="border-2 border-gray-100 rounded-xl px-4 py-2 text-sm font-bold focus:border-[#272A6F] outline-none bg-white">
-            {BRANCHES.map(b => <option key={b}>{b}</option>)}
-          </select>
-          <select value={semester} onChange={e => setSemester(e.target.value)}
-            className="border-2 border-gray-100 rounded-xl px-4 py-2 text-sm font-bold focus:border-[#272A6F] outline-none bg-white">
-            {SEMESTERS.map(s => <option key={s}>{s}</option>)}
-          </select>
-          <select value={section} onChange={e => setSection(e.target.value)} disabled={profile?.role === 'student' && profile?.section}
-            className="border-2 border-gray-100 rounded-xl px-4 py-2 text-sm font-bold focus:border-[#272A6F] outline-none bg-white">
-            {['A', 'B', 'C'].map(s => <option key={s}>{s}</option>)}
-          </select>
+        <div className="flex flex-wrap items-center gap-2">
+          {isStaff && (
+            <div className="flex bg-gray-100 p-1 rounded-xl mr-2">
+              <button onClick={() => setViewMode('personal')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all ${viewMode === 'personal' ? 'bg-[#272A6F] text-white' : 'text-gray-400'}`}>My Schedule</button>
+              <button onClick={() => setViewMode('class')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all ${viewMode === 'class' ? 'bg-[#272A6F] text-white' : 'text-gray-400'}`}>Class View</button>
+            </div>
+          )}
+          {viewMode === 'class' && (
+            <>
+              <select value={branch} onChange={e => setBranch(e.target.value)} disabled={profile?.role === 'student' || (!isHOD && profile?.branch)}
+                className="border-2 border-gray-100 rounded-xl px-4 py-2 text-sm font-bold focus:border-[#272A6F] outline-none bg-white disabled:opacity-50">
+                {BRANCHES.map(b => <option key={b}>{b}</option>)}
+              </select>
+              <select value={semester} onChange={e => setSemester(e.target.value)}
+                className="border-2 border-gray-100 rounded-xl px-4 py-2 text-sm font-bold focus:border-[#272A6F] outline-none bg-white">
+                {SEMESTERS.map(s => <option key={s}>{s}</option>)}
+              </select>
+              <select value={section} onChange={e => setSection(e.target.value)} disabled={profile?.role === 'student'}
+                className="border-2 border-gray-100 rounded-xl px-4 py-2 text-sm font-bold focus:border-[#272A6F] outline-none bg-white disabled:opacity-50">
+                {['A', 'B', 'C'].map(s => <option key={s}>{s}</option>)}
+              </select>
+            </>
+          )}
         </div>
       </header>
 
@@ -145,11 +176,13 @@ export default function SmartTimetable({ profile, onMarkAttendance }) {
                   <span className="text-[9px] font-mono font-bold text-gray-400">{SLOT_TIMES[t.slot]}</span>
                 </div>
                 <h4 className="font-bold text-[#272A6F] text-sm leading-tight">{t.subjects?.name}</h4>
-                <p className="text-[9px] text-gray-400 font-mono mt-1">{t.subjects?.code}</p>
-                {isFaculty && (
-                  <button onClick={() => onMarkAttendance(t.subject_id)}
+                <p className="text-[9px] text-[#272A6F]/60 font-black mt-1 uppercase tracking-tighter">
+                  {t.subjects?.code} {viewMode === 'personal' && `· ${t.branch}-${t.section}`}
+                </p>
+                {isStaff && (
+                  <button onClick={() => onMarkAttendance({ subjectId: t.subject_id, branch: t.branch, section: t.section })}
                     className="mt-3 w-full py-1.5 bg-[#272A6F] text-white rounded-xl text-[10px] font-black hover:bg-blue-600 transition-all">
-                    Start Attendance
+                    Mark Attendance
                   </button>
                 )}
               </div>
@@ -195,30 +228,34 @@ export default function SmartTimetable({ profile, onMarkAttendance }) {
                         <div className="relative group/slot p-3 rounded-xl bg-blue-50 border border-blue-100 h-full flex flex-col justify-between">
                           <div>
                             <p className="text-[10px] font-black text-blue-800 leading-tight">{entry.subjects?.name}</p>
-                            <p className="text-[9px] font-mono font-bold text-blue-400 mt-1">{entry.subjects?.code}</p>
+                            <p className="text-[9px] font-mono font-bold text-blue-400 mt-1 uppercase">
+                              {entry.subjects?.code} {viewMode === 'personal' && `· ${entry.branch}-${entry.section}`}
+                            </p>
                           </div>
-                          {isFaculty && (
+                          {isStaff && (
                             <div className="flex justify-between items-end mt-2">
                               <button 
-                                onClick={() => onMarkAttendance(entry.subject_id)}
+                                onClick={() => onMarkAttendance({ subjectId: entry.subject_id, branch: entry.branch, section: entry.section })}
                                 className="text-[9px] px-2 py-1 bg-[#272A6F] text-white rounded-lg font-bold hover:bg-[#343a8a] transition-all shadow-sm"
                               >
-                                Mark Attendance
+                                Mark
                               </button>
-                              <div className="flex space-x-1 opacity-0 group-hover/slot:opacity-100 transition-opacity">
-                                <button onClick={() => setActiveSlot({ day, slot })} className="p-1 text-blue-600 hover:bg-blue-200 rounded-md">
-                                  <Plus size={12} />
-                                </button>
-                                <button onClick={() => clearSlot(day, slot)} className="p-1 text-red-600 hover:bg-red-200 rounded-md">
-                                  <Trash2 size={12} />
-                                </button>
-                              </div>
+                              {viewMode === 'class' && isHOD && (
+                                <div className="flex space-x-1 opacity-0 group-hover/slot:opacity-100 transition-opacity">
+                                  <button onClick={() => setActiveSlot({ day, slot })} className="p-1 text-blue-600 hover:bg-blue-200 rounded-md">
+                                    <Plus size={12} />
+                                  </button>
+                                  <button onClick={() => clearSlot(day, slot)} className="p-1 text-red-600 hover:bg-red-200 rounded-md">
+                                    <Trash2 size={12} />
+                                  </button>
+                                </div>
+                              )}
                             </div>
                           )}
                         </div>
                       ) : (
                         <div className="h-full flex items-center justify-center py-4">
-                          {isFaculty ? (
+                          {viewMode === 'class' && isHOD ? (
                             <button onClick={() => setActiveSlot({ day, slot })}
                               className="w-8 h-8 rounded-lg bg-gray-50 border-2 border-dashed border-gray-200 flex items-center justify-center text-gray-300 hover:border-[#272A6F] hover:text-[#272A6F] transition-all">
                               <Plus size={16} />

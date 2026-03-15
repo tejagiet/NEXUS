@@ -212,9 +212,12 @@ export default function App() {
               profile={profile} 
               prefill={prefill}
               onPrefillClear={(p) => {
-                if (typeof p === 'string') { // Jumping TO Attendance
+                if (p && typeof p === 'object') { 
+                  setPrefill(p)
+                  setActiveTab('register')
+                } else if (typeof p === 'string') {
                   setPrefill({ subjectId: p })
-                  setActiveTab(profile.role === 'admin' ? 'register' : 'register') // register is correct for both
+                  setActiveTab('register')
                 } else {
                   setPrefill(null)
                 }
