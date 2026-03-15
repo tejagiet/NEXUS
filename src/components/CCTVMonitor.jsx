@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { 
   Camera, AlertTriangle, Monitor, Globe, Activity, Loader2, PlayCircle, ShieldAlert, 
-  Maximize2, Minimize2, Eye, EyeOff, Radio, Video, ZoomIn, ZoomOut, Layout, Grid, X, RefreshCw
+  Maximize2, Minimize2, Eye, EyeOff, Radio, Video, ZoomIn, ZoomOut, Layout, Grid, X, RefreshCw, Settings
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 
