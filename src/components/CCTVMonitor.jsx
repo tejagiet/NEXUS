@@ -2,17 +2,18 @@ import React, { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { 
   Camera, AlertTriangle, Monitor, Globe, Activity, Loader2, PlayCircle, ShieldAlert, 
-  Maximize2, Minimize2, Eye, EyeOff, Radio, Video, ZoomIn, ZoomOut, Layout, Grid, X
+  Maximize2, Minimize2, Eye, EyeOff, Radio, Video, ZoomIn, ZoomOut, Layout, Grid, X, RefreshCw
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 
 // 🏗️ Sub-Component: Smart Surveillance Player
-function SurveillanceNode({ stream, motionActive, onFullscreen }) {
+function SurveillanceNode({ stream, motionActive, onFullscreen, hlsLoaded }) {
   const videoRef = useRef(null)
   const [hasError, setHasError] = useState(false)
   const [nightVision, setNightVision] = useState(false)
   const [isRecording, setIsRecording] = useState(false)
   const [zoomLevel, setZoomLevel] = useState(1)
+  const [retryKey, setRetryKey] = useState(0)
   const [isHLS] = useState(stream.url?.includes('.m3u8'))
   const [isRTSP] = useState(stream.url?.startsWith('rtsp://'))
   const [timestamp, setTimestamp] = useState(new Date().toLocaleTimeString())
@@ -23,19 +24,57 @@ function SurveillanceNode({ stream, motionActive, onFullscreen }) {
   }, [])
 
   useEffect(() => {
-    if (isHLS && videoRef.current && window.Hls) {
-      const hls = new window.Hls()
-      hls.loadSource(stream.url)
-      hls.attachMedia(videoRef.current)
-      hls.on(window.Hls.Events.MANIFEST_PARSED, () => {
-        videoRef.current.play().catch(() => {})
-      })
-      hls.on(window.Hls.Events.ERROR, () => setHasError(true))
-      return () => hls.destroy()
+    if (!isHLS || !videoRef.current) return
+
+    const video = videoRef.current
+    let hls = null
+
+    const initStream = () => {
+      console.log(`[Surveillance SOC] Initializing Stream: ${stream.name} (HLS Ready: ${hlsLoaded})`)
+      
+      // 🍎 Native HLS Support (Safari/Mobile)
+      if (video.canPlayType('application/vnd.apple.mpegurl')) {
+        console.log(`[Surveillance SOC] Using Native HLS for ${stream.name}`)
+        video.src = stream.url
+        video.addEventListener('loadedmetadata', () => video.play().catch(() => {}))
+      } 
+      // 📦 HLS.js Support (Chrome/FF)
+      else if (window.Hls && window.Hls.isSupported()) {
+        console.log(`[Surveillance SOC] Using HLS.js for ${stream.name}`)
+        hls = new window.Hls({
+          enableWorker: true,
+          lowLatencyMode: true,
+          backBufferLength: 60
+        })
+        hls.loadSource(stream.url)
+        hls.attachMedia(video)
+        hls.on(window.Hls.Events.MANIFEST_PARSED, () => {
+          video.play().catch(err => console.warn(`[Surveillance SOC] Play blocked: ${err.message}`))
+        })
+        hls.on(window.Hls.Events.ERROR, (event, data) => {
+          if (data.fatal) {
+            console.error(`[Surveillance SOC] Fatal HLS Error:`, data)
+            setHasError(true)
+          }
+        })
+      } else if (!hlsLoaded) {
+        console.log(`[Surveillance SOC] Waiting for HLS engine to hydrate...`)
+      } else {
+        console.error(`[Surveillance SOC] HLS not supported in this environment.`)
+        setHasError(true)
+      }
     }
-  }, [stream.url, isHLS])
+
+    setHasError(false)
+    initStream()
+
+    return () => {
+      if (hls) hls.destroy()
+    }
+  }, [stream.url, isHLS, hlsLoaded, retryKey])
 
   const toggleZoom = () => setZoomLevel(prev => prev === 1 ? 1.5 : prev === 1.5 ? 2 : 1)
+  const handleReconnect = () => setRetryKey(prev => prev + 1)
 
   return (
     <motion.div 
@@ -61,14 +100,34 @@ function SurveillanceNode({ stream, motionActive, onFullscreen }) {
                 {stream.url}
               </div>
             </div>
-          ) : isHLS && !hasError ? (
-            <video 
-              ref={videoRef} 
-              className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity"
-              muted 
-              autoPlay 
-              playsInline
-            />
+          ) : isHLS ? (
+            <div className="w-full h-full relative">
+              <video 
+                ref={videoRef} 
+                className={`w-full h-full object-cover transition-opacity duration-700 ${hasError ? 'opacity-0' : 'opacity-80 group-hover:opacity-100'}`}
+                muted 
+                autoPlay 
+                playsInline
+              />
+              {hasError && (
+                <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#0a0a0a] text-red-500 p-4 text-center">
+                  <ShieldAlert className="w-10 h-10 mb-2 opacity-30" />
+                  <p className="text-[10px] font-black uppercase tracking-widest text-white/40">Feed Link Interrupted</p>
+                  <button 
+                    onClick={handleReconnect}
+                    className="mt-4 flex items-center gap-2 px-4 py-2 bg-red-600/20 hover:bg-red-600/40 rounded-xl transition-all text-red-400 group/btn border border-red-500/20"
+                  >
+                    <RefreshCw size={14} className="group-hover/btn:rotate-180 transition-transform duration-500" />
+                    <span className="text-[9px] font-black uppercase">Reconnect Feed</span>
+                  </button>
+                </div>
+              )}
+              {!hlsLoaded && !hasError && (
+                <div className="absolute inset-0 flex items-center justify-center bg-[#0a0a0a]">
+                  <Loader2 className="animate-spin text-white/10" size={30} />
+                </div>
+              )}
+            </div>
           ) : (
             <img 
               src={stream.url} 
@@ -104,7 +163,7 @@ function SurveillanceNode({ stream, motionActive, onFullscreen }) {
             {nightVision ? <EyeOff size={20} /> : <Eye size={20} />}
           </button>
           <button 
-            onClick={() => setTimestamp(new Date().toLocaleTimeString()) || setIsRecording(!isRecording)}
+            onClick={() => setIsRecording(!isRecording)}
             className={`p-3 rounded-2xl backdrop-blur-xl border border-white/20 transition-all ${isRecording ? 'bg-red-600 text-white shadow-lg shadow-red-600/20' : 'bg-black/40 text-white hover:bg-black/60'}`}
           >
             <Radio size={20} />
@@ -146,8 +205,8 @@ function SurveillanceNode({ stream, motionActive, onFullscreen }) {
           </div>
         </div>
         <div className="text-[10px] font-black font-mono text-gray-400 bg-gray-50/50 px-3 py-1.5 rounded-xl border border-gray-200/50 flex items-center gap-2">
-          <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
-          BITRATE: {(3.5 + Math.random()).toFixed(1)} Mb/s
+          <span className={`w-1.5 h-1.5 rounded-full animate-pulse ${hasError ? 'bg-red-500' : 'bg-green-500'}`} />
+          BITRATE: {hasError ? '0.0' : (3.5 + Math.random()).toFixed(1)} Mb/s
         </div>
       </div>
 
@@ -167,12 +226,20 @@ export default function CCTVMonitor({ profile }) {
   const [loading, setLoading] = useState(true)
   const [isCinemaMode, setIsCinemaMode] = useState(false)
   const [fullscreenStream, setFullscreenStream] = useState(null)
+  const [hlsLoaded, setHlsLoaded] = useState(!!window.Hls)
 
   useEffect(() => {
-    // 📼 Load HLS.js for browser support
+    // 📼 Load HLS.js for browser support with State Tracking
     if (!window.Hls) {
+      console.log("[Surveillance SOC] Hydrating Video Engine...")
       const script = document.createElement('script')
       script.src = 'https://cdn.jsdelivr.net/npm/hls.js@latest'
+      script.async = true
+      script.onload = () => {
+        console.log("[Surveillance SOC] Video Engine Active (v4.6)")
+        setHlsLoaded(true)
+      }
+      script.onerror = () => console.error("[Surveillance SOC] Critical Error: CDN Failed to deliver Video Engine")
       document.body.appendChild(script)
     }
 
@@ -187,7 +254,7 @@ export default function CCTVMonitor({ profile }) {
     // 🚨 Real-time Motion Detection Listener
     const motionChannel = supabase
       .channel('cctv_motion')
-      .on('broadcast', { event: 'motion_detected' }, (payload) => {
+      .on('broadcast', { event: 'motion_detected' }, () => {
         setMotionActive(true)
         setTimeout(() => setMotionActive(false), 5000)
       })
@@ -232,7 +299,7 @@ export default function CCTVMonitor({ profile }) {
             SURVEILLANCE <span className="text-[#EFBE33]">MONITOR</span>
           </h2>
           <div className="flex items-center gap-3 mt-1">
-            <span className="px-2 py-0.5 bg-[#272A6F] text-white text-[9px] font-black rounded uppercase tracking-widest">SOC v4.5</span>
+            <span className="px-2 py-0.5 bg-[#272A6F] text-white text-[9px] font-black rounded uppercase tracking-widest">SOC v4.6 Patch</span>
             <p className="text-gray-500 font-bold uppercase tracking-[0.2em] text-[10px]">Security Operations Terminal - Integrated</p>
           </div>
         </div>
@@ -307,7 +374,7 @@ export default function CCTVMonitor({ profile }) {
             <Loader2 className="animate-spin text-[#272A6F]" size={80} />
             <Video className="absolute inset-0 m-auto text-[#EFBE33] w-8 h-8 opacity-50" />
           </div>
-          <p className="text-gray-400 font-black uppercase tracking-[0.5em] text-[10px] animate-pulse">Syncing Secure SOC Uplink...</p>
+          <p className="text-gray-400 font-black uppercase tracking-[0.5em] text-[10px] animate-pulse">Establishing Satellite SOC Uplink...</p>
         </div>
       ) : (
         <motion.div 
@@ -322,6 +389,7 @@ export default function CCTVMonitor({ profile }) {
                     stream={activeStreams[0]} 
                     motionActive={motionActive} 
                     onFullscreen={setFullscreenStream}
+                    hlsLoaded={hlsLoaded}
                   />
                 </div>
               )}
@@ -333,6 +401,7 @@ export default function CCTVMonitor({ profile }) {
                     stream={stream} 
                     motionActive={motionActive} 
                     onFullscreen={setFullscreenStream}
+                    hlsLoaded={hlsLoaded}
                   />
                 ))}
               </div>
@@ -340,7 +409,7 @@ export default function CCTVMonitor({ profile }) {
           ) : (
              <div className="col-span-full py-40 flex flex-col items-center opacity-20">
                 <Video size={100} className="text-[#272A6F] mb-4" />
-                <p className="font-black uppercase tracking-[0.3em]">No Remote Nodes Link</p>
+                <p className="font-black uppercase tracking-[0.3em]">No Remote Nodes Linked</p>
              </div>
           )}
           
@@ -376,6 +445,7 @@ export default function CCTVMonitor({ profile }) {
                 stream={fullscreenStream} 
                 motionActive={motionActive} 
                 onFullscreen={() => setFullscreenStream(null)}
+                hlsLoaded={hlsLoaded}
               />
               <div className="mt-8 flex items-center justify-between text-white/40 font-mono text-[10px] uppercase tracking-[0.5em] px-10">
                 <span>Direct Feed: {fullscreenStream.url}</span>

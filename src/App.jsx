@@ -13,6 +13,7 @@ import ProjectStatus from './components/ProjectStatus'
 import MFAVerify from './components/MFAVerify'
 import ManagementSuite from './components/ManagementSuite'
 import SmartTimetable from './components/SmartTimetable'
+import BatchFees from './components/BatchFees'
 import {
   LayoutDashboard, LogOut, User, ClipboardList, Wallet, Camera,
   GraduationCap, BookOpen, ShieldCheck, Settings, Menu, X, MessageSquare, Calendar
@@ -40,6 +41,7 @@ const MENU = {
     { id: 'timetable',    label: 'Global Schedule',icon: Calendar },
     { id: 'register',     label: 'Attendance',     icon: ClipboardList },
     { id: 'classresults', label: 'Class Results',  icon: GraduationCap },
+    { id: 'batchfees',    label: 'Finance Batch',  icon: Wallet },
     { id: 'cctv',         label: 'CCTV Monitor',   icon: Camera },
     { id: 'mgmt',         label: 'Management',     icon: Settings },
     { id: 'lms',          label: 'Resources',      icon: BookOpen },
@@ -55,6 +57,7 @@ function RoleView({ tab, profile, prefill, onPrefillClear }) {
     case 'fees':         return <FinanceBridge profile={profile} />
     case 'register':     return <FacultyRegister profile={profile} prefill={prefill} onPrefillClear={onPrefillClear} />
     case 'classresults': return <ClassResults profile={profile} />
+    case 'batchfees':    return <BatchFees profile={profile} />
     case 'lms':          return <LMSPortal profile={profile} />
     case 'cctv':         return <CCTVMonitor profile={profile} />
     case 'mfa':          return <MFASetup profile={profile} />
