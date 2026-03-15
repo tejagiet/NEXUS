@@ -62,8 +62,18 @@ export default function LMSPortal({ profile }) {
 
   async function fetchAttendanceStats() {
     setLoading(true)
-    const { data, error } = await supabase.from('attendance').select('*, subjects(name, code)').eq('student_id', profile.id)
-    if (!error) setAttendanceData(data || [])
+    if (profile?.role === 'student' && profile?.pin_number) {
+      // For students, fetch by their PIN
+      const { data: student } = await supabase.from('students').select('id').eq('pin_number', profile.pin_number).maybeSingle()
+      if (student) {
+        const { data, error } = await supabase.from('attendance').select('*, subjects(name, code)').eq('student_id', student.id)
+        if (!error) setAttendanceData(data || [])
+      }
+    } else {
+      // For staff, raw data is handled in the sub-component but we fetch names/pins
+      const { data, error } = await supabase.from('attendance').select('*, subjects(name, code)')
+      if (!error) setAttendanceData(data || [])
+    }
     setLoading(false)
   }
 
@@ -506,7 +516,8 @@ function AttendanceSheet({ profile }) {
   async function fetchSheet() {
     setLoading(true)
     const { data: sub } = await supabase.from('subjects').select('branch').eq('id', selectedSub).single()
-    const { data: stus } = await supabase.from('profiles').select('*').eq('role', 'student').eq('branch', sub.branch)
+    // Use 'students' table instead of 'profiles' for roll numbers
+    const { data: stus } = await supabase.from('students').select('*').eq('branch', sub.branch).order('pin_number', { ascending: true })
     const { data: att } = await supabase.from('attendance').select('*').eq('subject_id', selectedSub)
     
     setStudents(stus || [])
@@ -546,7 +557,7 @@ function AttendanceSheet({ profile }) {
                   return (
                     <tr key={s.id} className="border-t border-gray-50 hover:bg-gray-50/50">
                       <td className="p-4 font-bold text-sm text-[#272A6F]">{s.full_name}</td>
-                      <td className="p-4 font-mono text-xs text-gray-400">{s.id.slice(0, 8)}</td>
+                      <td className="p-4 font-mono text-xs font-bold text-[#272A6F] bg-gray-50 rounded px-2">{s.pin_number || '—'}</td>
                       <td className="p-4 text-center font-bold text-gray-500">{total}</td>
                       <td className="p-4 text-center font-bold text-emerald-500">{present}</td>
                       <td className="p-4 text-center">

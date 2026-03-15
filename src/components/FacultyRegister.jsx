@@ -12,6 +12,8 @@ export default function FacultyRegister({ profile, prefill, onPrefillClear }) {
   const [faculty,         setFaculty]         = useState([])
   const [toast,           setToast]           = useState(null) // { type, msg }
   const [databaseSyncError, setDatabaseSyncError] = useState(null)
+  const [curriculumTopics, setCurriculumTopics] = useState([])
+  const [topic, setTopic] = useState('')
 
   useEffect(() => { fetchData() }, [])
 
@@ -56,6 +58,15 @@ export default function FacultyRegister({ profile, prefill, onPrefillClear }) {
     }
   }
 
+  useEffect(() => {
+    async function fetchCurriculum() {
+      if (!selectedSubject) return
+      const { data } = await supabase.from('curriculum').select('title').eq('subject_id', selectedSubject).order('order_index', { ascending: true })
+      setCurriculumTopics(data || [])
+    }
+    fetchCurriculum()
+  }, [selectedSubject])
+
   const toggleAttendance = (studentId, status) => {
     setAttendanceData(prev => ({ ...prev, [studentId]: status }))
   }
@@ -68,6 +79,7 @@ export default function FacultyRegister({ profile, prefill, onPrefillClear }) {
 
   const saveAttendance = async () => {
     if (!selectedSubject) { showToast('error', 'Select a subject first.'); return }
+    if (!topic.trim()) { showToast('error', 'Lesson Topic is mandatory.'); return }
     if (Object.keys(attendanceData).length === 0) {
       showToast('error', 'Mark at least one student before saving.')
       return
@@ -78,7 +90,8 @@ export default function FacultyRegister({ profile, prefill, onPrefillClear }) {
       subject_id: selectedSubject,
       status,
       marked_by: profile.id,
-      date: new Date().toISOString().split('T')[0]
+      date: new Date().toISOString().split('T')[0],
+      topic: topic.trim()
     }))
 
     const { error } = await supabase
@@ -112,6 +125,7 @@ export default function FacultyRegister({ profile, prefill, onPrefillClear }) {
       }
     } else {
       showToast('success', `Attendance saved for ${updates.length} students! ✓`)
+      setTopic('')
     }
     setLoading(false)
   }
@@ -132,15 +146,22 @@ export default function FacultyRegister({ profile, prefill, onPrefillClear }) {
           </h2>
           <p className="text-gray-500">Mark daily attendance for GIET cadets in real-time.</p>
         </div>
-        <div className="flex space-x-2">
-          <button onClick={() => markAll('present')}
-            className="px-4 py-2 bg-green-100 text-green-700 rounded-xl text-sm font-bold hover:bg-green-200 transition-colors">
-            All Present
-          </button>
-          <button onClick={() => markAll('absent')}
-            className="px-4 py-2 bg-red-100 text-red-700 rounded-xl text-sm font-bold hover:bg-red-200 transition-colors">
-            All Absent
-          </button>
+        <div className="flex flex-col sm:flex-row gap-2">
+          <input type="text" value={topic} onChange={e => setTopic(e.target.value)} list="curr-list" placeholder="Lesson Topic (Select from syllabus or type...)"
+            className="border bg-white border-gray-100 rounded-xl px-4 py-2 text-sm focus:ring-2 focus:ring-[#272A6F] outline-none font-medium min-w-[250px]" />
+          <datalist id="curr-list">
+            {curriculumTopics.map((t, idx) => <option key={idx} value={t.title} />)}
+          </datalist>
+          <div className="flex space-x-2">
+            <button onClick={() => markAll('present')}
+              className="px-4 py-2 bg-green-100 text-green-700 rounded-xl text-xs font-bold hover:bg-green-200 transition-colors">
+              All P
+            </button>
+            <button onClick={() => markAll('absent')}
+              className="px-4 py-2 bg-red-100 text-red-700 rounded-xl text-xs font-bold hover:bg-red-200 transition-colors">
+              All A
+            </button>
+          </div>
         </div>
       </header>
 
@@ -180,10 +201,19 @@ export default function FacultyRegister({ profile, prefill, onPrefillClear }) {
             </span>
           </div>
           <select value={selectedSubject} onChange={e => setSelectedSubject(e.target.value)}
-            className="bg-white border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#272A6F]">
+            className="bg-white border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#272A6F] font-bold">
             {subjects.length === 0 && <option>No subjects found</option>}
-            {subjects.map(s => <option key={s.id} value={s.id}>{s.name} ({s.code})</option>)}
+            {subjects.map(s => <option key={s.id} value={s.id}>{s.name} ({s.branch})</option>)}
           </select>
+          {(() => {
+            const sub = subjects.find(x => x.id === selectedSubject)
+            if (!sub) return null
+            return (
+              <div className="flex items-center px-3 py-1.5 bg-[#272A6F]/5 border border-[#272A6F]/10 rounded-xl">
+                <span className="text-[10px] font-black text-[#272A6F] uppercase tracking-widest">{sub.branch}</span>
+              </div>
+            )
+          })()}
         </div>
 
         {/* Student table */}
@@ -245,7 +275,12 @@ export default function FacultyRegister({ profile, prefill, onPrefillClear }) {
       </div>
 
       {/* Save button */}
-      <div className="flex justify-end">
+    <div className="flex justify-end gap-3 items-center mt-6">
+        {toast && (
+          <span className={`text-xs font-bold ${toast.type === 'success' ? 'text-green-500' : 'text-red-500'}`}>
+            {toast.msg}
+          </span>
+        )}
         <button onClick={saveAttendance} disabled={loading || students.length === 0}
           className="flex items-center space-x-2 bg-[#272A6F] text-white px-8 py-3 rounded-xl font-bold hover:shadow-2xl hover:-translate-y-1 transition-all active:scale-95 disabled:opacity-50">
           {loading ? <Loader2 className="animate-spin" size={20} /> : <Save size={20} />}

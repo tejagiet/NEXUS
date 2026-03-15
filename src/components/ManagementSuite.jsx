@@ -1,27 +1,36 @@
 import React, { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
-import { ToggleLeft, ToggleRight, Save, User2, MessageSquarePlus, Inbox, Loader2, CheckCircle2, Phone, KeyRound, Send, UserPlus, Mail, Lock, BadgeCheck, Trash2, AlertCircle, BookOpen, BookMarked, Layers, FileSpreadsheet, Download, Upload, ShieldCheck, AlertTriangle, Users, MessageSquare } from 'lucide-react'
+import { ToggleLeft, ToggleRight, Save, User2, MessageSquarePlus, Inbox, Loader2, CheckCircle2, Phone, KeyRound, Send, UserPlus, Mail, Lock, BadgeCheck, Trash2, AlertCircle, BookOpen, BookMarked, Layers, FileSpreadsheet, Download, Upload, ShieldCheck, AlertTriangle, Users, MessageSquare, User } from 'lucide-react'
 
 const BRANCHES = ['CME', 'ECE', 'EEE', 'ME', 'CIVIL', 'AI', 'IT', 'CSE']
 const SECTIONS = ['A', 'B', 'C', 'D']
 const ROLES = ['student', 'faculty', 'admin', 'principal', 'vice_principal', 'hod', 'class_teacher']
 
+const TABS = [
+  { id: 'users', label: 'User Creator', icon: UserPlus, roles: ['admin', 'hod', 'principal'] },
+  { id: 'subjects', label: 'Subject Manager', icon: BookMarked, roles: ['admin', 'hod', 'principal', 'vice_principal'] },
+  { id: 'roles', label: 'Role Manager', icon: ShieldCheck, roles: ['admin'] },
+  { id: 'curriculum', label: 'Curriculum', icon: Layers, roles: ['admin', 'hod', 'principal', 'vice_principal'] },
+  { id: 'profiles', label: 'Profiles', icon: User, roles: ['admin', 'hod', 'principal', 'faculty', 'class_teacher', 'vice_principal', 'student'], studentOnly: true },
+  { id: 'feedback', label: 'Feedback', icon: MessageSquare, roles: ['admin', 'hod', 'principal', 'faculty', 'class_teacher', 'vice_principal', 'student'] },
+]
+
 export default function ManagementSuite({ profile, prefill, onPrefillClear }) {
-  const [activeTab, setActiveTab] = useState(profile?.role === 'student' ? 'profiles' : 'register')
+  const [activeTab, setActiveTab] = useState(profile?.role === 'student' ? 'profiles' : 'users') // Default to 'users' for non-students, 'profiles' for students
   const [databaseSyncError, setDatabaseSyncError] = useState(null)
-  const tabs = [
-    { id: 'register', label: 'Digital Register', icon: ToggleRight },
-    { id: 'profiles', label: 'My Profile', icon: User2 },
-    { id: 'feedback', label: 'Nexus Inbox', icon: Inbox },
-    ...(['admin', 'principal', 'vice_principal', 'hod'].includes(profile?.role) ? [
-      { id: 'users', label: 'User Creator', icon: UserPlus },
-      { id: 'subjects', label: 'Subject Manager', icon: BookMarked },
-      { id: 'roles', label: 'Role Manager', icon: ShieldCheck },
-      { id: 'curriculum', label: 'Curriculum Manager', icon: Layers },
-    ] : []),
-  ]
+
+  useEffect(() => {
+    // Default to the first allowed tab based on role
+    if (!activeTab || !TABS.find(t => t.id === activeTab)) {
+      const allowed = TABS.filter(t => t.roles.includes(profile?.role))
+      if (allowed.length > 0) setActiveTab(allowed[0].id)
+    }
+  }, [profile, activeTab])
+
   // Students see a feedback submit tab instead of admin tabs
   // No more hard redirect. Students get a focused Management Suite.
+
+  const isStudent = profile?.role === 'student'
 
   return (
     <div className="space-y-6">
@@ -35,19 +44,7 @@ export default function ManagementSuite({ profile, prefill, onPrefillClear }) {
           <p className="text-gray-500 text-sm font-medium">Control center for students, subjects, and system health.</p>
         </div>
         <div className="flex bg-gray-100 p-1 rounded-2xl border border-gray-200 shadow-inner">
-          {[
-            { id: 'register', label: 'Attendance', icon: ToggleRight },
-            { id: 'profiles', label: 'Profile', icon: User2 },
-            { id: 'users', label: 'Accounts', icon: Users },
-            { id: 'roles', label: 'Roles', icon: KeyRound },
-            { id: 'curriculum', label: 'Syllabus', icon: Layers },
-            { id: 'subjects', label: 'Subjects', icon: BookOpen },
-            { id: 'feedback', label: 'Feedback', icon: MessageSquare },
-          ].filter(t => {
-            if (profile?.role === 'student') return ['profiles', 'feedback'].includes(t.id)
-            if (['faculty', 'class_teacher'].includes(profile?.role)) return ['register', 'profiles', 'feedback'].includes(t.id)
-            return true
-          }).map(t => (
+          {TABS.filter(t => t.roles.includes(profile?.role)).map(t => (
             <button
               key={t.id}
               onClick={() => setActiveTab(t.id)}
@@ -74,231 +71,18 @@ export default function ManagementSuite({ profile, prefill, onPrefillClear }) {
       )}
 
       <div className="bg-white rounded-[2.5rem] p-4 lg:p-8 shadow-2xl shadow-[#272A6F]/5 border border-gray-100">
-        {activeTab === 'register' && <DigitalRegister profile={profile} prefill={prefill} onPrefillClear={onPrefillClear} setDatabaseSyncError={setDatabaseSyncError} />}
-        {activeTab === 'profiles' && <ProfileEditor profile={profile} isAdmin={['admin', 'principal', 'hod', 'faculty', 'class_teacher', 'vice_principal'].includes(profile?.role)} />}
-        {activeTab === 'feedback' && (profile?.role === 'student' ? <StudentFeedback profile={profile} /> : <FeedbackInbox profile={profile} />)}
-        {activeTab === 'users' && <AdminUserCreator profile={profile} setDatabaseSyncError={setDatabaseSyncError} />}
-        {activeTab === 'subjects' && <SubjectManager profile={profile} setDatabaseSyncError={setDatabaseSyncError} />}
-        {activeTab === 'roles' && <RoleManager profile={profile} setDatabaseSyncError={setDatabaseSyncError} />}
-        {activeTab === 'curriculum' && <CurriculumManager profile={profile} setDatabaseSyncError={setDatabaseSyncError} />}
-      </div>
-    </div>
-  )
-}
-
-/* ── Digital Register ─────────────────────────────── */
-function DigitalRegister({ profile, prefill, onPrefillClear, setDatabaseSyncError }) {
-  const [students, setStudents] = useState([])
-  const [subjects, setSubjects] = useState([])
-  const [subject, setSubject] = useState('')
-  const [section, setSection] = useState('A')
-  const [date, setDate] = useState(new Date().toISOString().split('T')[0])
-  const [topic, setTopic] = useState('')
-  const [marks, setMarks] = useState({}) // { studentId: 'present'|'absent' }
-  const [curriculumTopics, setCurriculumTopics] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
-  const [saved, setSaved] = useState(false)
-
-  useEffect(() => {
-    async function load() {
-      // Defensive check for prefill which may cause ReferenceErrors if props aren't tracked correctly
-      const localPrefill = (typeof prefill !== 'undefined') ? prefill : null;
-      const localOnPrefillClear = (typeof onPrefillClear === 'function') ? onPrefillClear : () => { };
-
-      try {
-        let stuQuery = supabase.from('students').select('id,full_name,pin_number,section,branch').order('pin_number', { ascending: true })
-        let subQuery = supabase.from('subjects').select('*')
-
-        // 🛡️ Faculty Isolation: Only see assigned subjects
-        if (profile?.role === 'faculty' || profile?.role === 'class_teacher') {
-          subQuery = subQuery.eq('faculty_id', profile.id)
-        } else if (profile?.role === 'hod') {
-          subQuery = subQuery.eq('branch', profile.branch)
-        }
-
-        const [{ data: stu, error: stuErr }, { data: sub, error: subErr }] = await Promise.all([
-          stuQuery,
-          subQuery
-        ])
-
-        if (stuErr || subErr) throw (stuErr || subErr)
-
-        setStudents(stu || [])
-        setSubjects(sub || [])
-        if (sub?.length) {
-          const initial = localPrefill?.subjectId || sub[0].id
-          setSubject(initial)
-          if (localPrefill?.subjectId) {
-            localOnPrefillClear()
-          }
-        }
-        setDatabaseSyncError(null)
-      } catch (err) {
-        console.error("Digital Register Load Error:", err.message)
-        if (err.message.includes('404') || err.message.includes('relation') || err.message.includes('column')) {
-          setDatabaseSyncError("DATABASE OUT OF SYNC: Essential tables (students/subjects) are missing. Please run the nexus_repair.sql script.")
-        }
-      } finally {
-        setLoading(false)
-      }
-    }
-    load()
-
-    // 🔄 Auto-Refresh
-    const c1 = supabase.channel('reg_stu').on('postgres_changes', { event: '*', schema: 'public', table: 'students' }, () => load()).subscribe()
-    const c2 = supabase.channel('reg_sub').on('postgres_changes', { event: '*', schema: 'public', table: 'subjects' }, () => load()).subscribe()
-
-    return () => { supabase.removeChannel(c1); supabase.removeChannel(c2) }
-  }, [])
-
-  useEffect(() => {
-    async function fetchCurriculum() {
-      if (!subject) return
-      const { data } = await supabase.from('curriculum').select('title').eq('subject_id', subject).order('order_index', { ascending: true })
-      setCurriculumTopics(data || [])
-    }
-    fetchCurriculum()
-  }, [subject])
-
-  function toggle(id) {
-    setMarks(m => ({ ...m, [id]: m[id] === 'present' ? 'absent' : 'present' }))
-  }
-  function markAll(status) {
-    const all = {}; students.forEach(s => { all[s.id] = status }); setMarks(all)
-  }
-
-  async function save() {
-    if (!topic.trim()) {
-      alert("Lesson Topic is mandatory. Please enter what you taught today."); return;
-    }
-    if (!subject) {
-      alert("Please select a subject."); return;
-    }
-    setSaving(true); setSaved(false)
-    const rows = Object.entries(marks).map(([student_id, status]) => ({
-      student_id, subject_id: subject, status,
-      marked_by: profile.id, date, topic
-    }))
-    try {
-      const { error: upsertErr } = await supabase.from('attendance').upsert(rows, { onConflict: 'student_id,subject_id,date' })
-      if (upsertErr) throw upsertErr
-      setSaving(false); setSaved(true); setTopic('')
-      setTimeout(() => setSaved(false), 3000)
-    } catch (err) {
-      console.error("Attendance Sync Critical Error:", err)
-      setSaving(false)
-
-      const isConflict =
-        err.status === 409 ||
-        err.code === '42P10' ||
-        err.code === '23505' ||
-        err.message?.toLowerCase().includes('conflict') ||
-        err.message?.toLowerCase().includes('on_conflict');
-
-      const isIntegrityError =
-        err.code === '23503' ||
-        err.message?.toLowerCase().includes('foreign key constraint') ||
-        err.message?.toLowerCase().includes('violates');
-
-      if (isConflict) {
-        const msg = "ATTENDANCE CONFLICT (409): Database unique constraint is missing.\n\nPlease run the 'attendance_fix.sql' script in your Supabase SQL Editor to solve this instantly."
-        setDatabaseSyncError(msg)
-        window.alert(msg)
-      } else if (isIntegrityError) {
-        const msg = "DATABASE INTEGRITY ERROR (23503): Attendance links are broken.\n\nPlease run the UPDATED 'attendance_fix.sql' script (v4) to repair your database links."
-        setDatabaseSyncError(msg)
-        window.alert(msg)
-      } else {
-        setDatabaseSyncError("Failed to save attendance: " + (err.message || "Unknown Error"))
-      }
-    }
-  }
-
-  if (loading) return <div className="flex justify-center py-12"><Loader2 className="animate-spin text-[#272A6F]" /></div>
-
-  return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <input type="date" value={date} onChange={e => setDate(e.target.value)}
-            className="border bg-white border-gray-200 rounded-xl px-4 py-2 text-sm focus:ring-2 focus:ring-[#272A6F] outline-none" />
-          <select value={subject} onChange={e => setSubject(e.target.value)}
-            className="border bg-white border-gray-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#272A6F]">
-            {subjects.length === 0 && <option value="">No subjects assigned</option>}
-            {subjects.map(s => <option key={s.id} value={s.id}>{s.name} ({s.branch})</option>)}
-          </select>
-          {(() => {
-            const sub = subjects.find(x => x.id === subject)
-            if (!sub) return null
-            return (
-              <div className="flex items-center px-3 py-1.5 bg-[#272A6F]/5 border border-[#272A6F]/10 rounded-xl">
-                <span className="text-[10px] font-black text-[#272A6F] uppercase tracking-widest">{sub.branch}</span>
-              </div>
-            )
-          })()}
-          <select value={section} onChange={e => setSection(e.target.value)}
-            className="border bg-white border-gray-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#272A6F]">
-            {['A', 'B', 'C'].map(s => <option key={s} value={s}>Section {s}</option>)}
-          </select>
-        </div>
-        <div className="flex-1 min-w-[200px] relative">
-          <input type="text" value={topic} onChange={e => setTopic(e.target.value)} list="curriculum-list" placeholder="Lesson Topic (Select from syllabus or type...)"
-            className="w-full border bg-white border-gray-100 rounded-xl px-4 py-2 text-sm focus:ring-2 focus:ring-[#272A6F] outline-none font-medium" />
-          <datalist id="curriculum-list">
-            {curriculumTopics.map((t, idx) => (
-              <option key={idx} value={t.title} />
-            ))}
-          </datalist>
-        </div>
-        <div className="flex space-x-2">
-          <button onClick={() => markAll('present')} className="px-3 py-2 text-xs font-bold bg-green-100 text-green-700 rounded-xl hover:bg-green-200 transition-colors">All P</button>
-          <button onClick={() => markAll('absent')} className="px-3 py-2 text-xs font-bold bg-red-100 text-red-700 rounded-xl hover:bg-red-200 transition-colors">All A</button>
-        </div>
-      </div>
-      <div className="space-y-2">
         {(() => {
-          const selectedSub = subjects.find(s => s.id === subject)
-          const filtered = students.filter(s => s.section === section && s.branch === selectedSub?.branch)
-
-          if (filtered.length === 0) return (
-            <div className="text-center py-10 text-gray-400 bg-gray-50 rounded-2xl border-2 border-dashed border-gray-100 italic">
-              <p className="text-sm font-bold">No students found in <span className="text-[#272A6F]/60">[{selectedSub?.branch || 'None'}]</span> Section <span className="text-[#272A6F]/60">[{section}]</span></p>
-              <p className="text-[10px] mt-1">Please verify the branch and section selection.</p>
-            </div>
-          )
-
-          return filtered.map(s => {
-            const present = marks[s.id] === 'present'
-            const absent = marks[s.id] === 'absent'
-            return (
-              <div key={s.id} className={`flex items-center justify-between p-4 rounded-2xl border transition-all ${present ? 'bg-green-50 border-green-200' : absent ? 'bg-red-50 border-red-200' : 'bg-gray-50 border-gray-200'}`}>
-                <div className="flex items-center space-x-3">
-                  <div className="w-10 h-10 bg-[#272A6F]/10 rounded-xl flex items-center justify-center text-xs font-black text-[#272A6F]">
-                    {s.full_name?.[0] || '?'}
-                  </div>
-                  <div>
-                    <p className="font-bold text-sm text-gray-800">{s.full_name}</p>
-                    <p className="font-black text-[10px] text-[#272A6F] font-mono bg-white px-1.5 py-0.5 rounded border border-gray-100 mt-0.5">
-                      {s.pin_number}
-                    </p>
-                  </div>
-                </div>
-                <button onClick={() => toggle(s.id)} className="transition-all">
-                  {present
-                    ? <ToggleRight size={36} className="text-green-500" />
-                    : <ToggleLeft size={36} className={absent ? 'text-red-400' : 'text-gray-300'} />}
-                </button>
-              </div>
-            )
-          })
+          switch (activeTab) {
+            case 'users': return <AdminUserCreator setDatabaseSyncError={setDatabaseSyncError} />
+            case 'subjects': return <SubjectManager profile={profile} setDatabaseSyncError={setDatabaseSyncError} />
+            case 'roles': return <RoleManager setDatabaseSyncError={setDatabaseSyncError} />
+            case 'curriculum': return <CurriculumManager profile={profile} setDatabaseSyncError={setDatabaseSyncError} />
+            case 'profiles': return <ProfileEditor profile={profile} setDatabaseSyncError={setDatabaseSyncError} />
+            case 'feedback': return isStudent ? <StudentFeedback profile={profile} /> : <FeedbackInbox profile={profile} />
+            default: return null
+          }
         })()}
       </div>
-      <button onClick={save} disabled={saving || Object.keys(marks).length === 0}
-        className="w-full flex items-center justify-center space-x-2 bg-[#272A6F] text-white py-3.5 rounded-xl font-bold hover:shadow-xl transition-all disabled:opacity-50">
-        {saving ? <Loader2 className="animate-spin" size={18} /> : saved ? <CheckCircle2 size={18} /> : <Save size={18} />}
-        <span>{saving ? 'Saving...' : saved ? 'Saved!' : 'Upload Attendance'}</span>
-      </button>
     </div>
   )
 }
