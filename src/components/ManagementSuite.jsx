@@ -95,6 +95,7 @@ function DigitalRegister({ profile, prefill, onPrefillClear, setDatabaseSyncErro
   const [date, setDate] = useState(new Date().toISOString().split('T')[0])
   const [topic, setTopic] = useState('')
   const [marks, setMarks] = useState({}) // { studentId: 'present'|'absent' }
+  const [curriculumTopics, setCurriculumTopics] = useState([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
@@ -150,6 +151,15 @@ function DigitalRegister({ profile, prefill, onPrefillClear, setDatabaseSyncErro
 
     return () => { supabase.removeChannel(c1); supabase.removeChannel(c2) }
   }, [])
+
+  useEffect(() => {
+    async function fetchCurriculum() {
+      if (!subject) return
+      const { data } = await supabase.from('curriculum').select('title').eq('subject_id', subject).order('order_index', { ascending: true })
+      setCurriculumTopics(data || [])
+    }
+    fetchCurriculum()
+  }, [subject])
 
   function toggle(id) {
     setMarks(m => ({ ...m, [id]: m[id] === 'present' ? 'absent' : 'present' }))
@@ -216,16 +226,30 @@ function DigitalRegister({ profile, prefill, onPrefillClear, setDatabaseSyncErro
           <select value={subject} onChange={e => setSubject(e.target.value)}
             className="border bg-white border-gray-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#272A6F]">
             {subjects.length === 0 && <option value="">No subjects assigned</option>}
-            {subjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+            {subjects.map(s => <option key={s.id} value={s.id}>{s.name} ({s.branch})</option>)}
           </select>
+          {(() => {
+            const sub = subjects.find(x => x.id === subject)
+            if (!sub) return null
+            return (
+              <div className="flex items-center px-3 py-1.5 bg-[#272A6F]/5 border border-[#272A6F]/10 rounded-xl">
+                <span className="text-[10px] font-black text-[#272A6F] uppercase tracking-widest">{sub.branch}</span>
+              </div>
+            )
+          })()}
           <select value={section} onChange={e => setSection(e.target.value)}
             className="border bg-white border-gray-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#272A6F]">
             {['A', 'B', 'C'].map(s => <option key={s} value={s}>Section {s}</option>)}
           </select>
         </div>
-        <div className="flex-1 min-w-[200px]">
-          <input type="text" value={topic} onChange={e => setTopic(e.target.value)} placeholder="Lesson Topic (e.g. Intro to React)"
+        <div className="flex-1 min-w-[200px] relative">
+          <input type="text" value={topic} onChange={e => setTopic(e.target.value)} list="curriculum-list" placeholder="Lesson Topic (Select from syllabus or type...)"
             className="w-full border bg-white border-gray-100 rounded-xl px-4 py-2 text-sm focus:ring-2 focus:ring-[#272A6F] outline-none font-medium" />
+          <datalist id="curriculum-list">
+            {curriculumTopics.map((t, idx) => (
+              <option key={idx} value={t.title} />
+            ))}
+          </datalist>
         </div>
         <div className="flex space-x-2">
           <button onClick={() => markAll('present')} className="px-3 py-2 text-xs font-bold bg-green-100 text-green-700 rounded-xl hover:bg-green-200 transition-colors">All P</button>
@@ -238,8 +262,9 @@ function DigitalRegister({ profile, prefill, onPrefillClear, setDatabaseSyncErro
           const filtered = students.filter(s => s.section === section && s.branch === selectedSub?.branch)
 
           if (filtered.length === 0) return (
-            <div className="text-center py-10 text-gray-400 bg-gray-50 rounded-2xl border-2 border-dashed border-gray-100">
-              <p className="text-sm font-bold">No students found in {selectedSub?.branch || ''} Section {section}</p>
+            <div className="text-center py-10 text-gray-400 bg-gray-50 rounded-2xl border-2 border-dashed border-gray-100 italic">
+              <p className="text-sm font-bold">No students found in <span className="text-[#272A6F]/60">[{selectedSub?.branch || 'None'}]</span> Section <span className="text-[#272A6F]/60">[{section}]</span></p>
+              <p className="text-[10px] mt-1">Please verify the branch and section selection.</p>
             </div>
           )
 

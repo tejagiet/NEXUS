@@ -1,39 +1,36 @@
 import React from 'react'
-import { CheckCircle2, Zap, ShieldCheck, Database, Layout, Clock, BarChart3, Cloud, Filter, Lock } from 'lucide-react'
+import { CheckCircle2, Zap, ShieldCheck, Database, Layout, Clock, BarChart3, Cloud, Filter, Lock, BookOpen, MessageSquare, Calendar, UserCheck } from 'lucide-react'
 
-const PHASES = [
-  { id: 1,  title: "Scraper Foundation", icon: Cloud, desc: "SBTET portal integration via Supabase Edge Functions." },
-  { id: 2,  title: "Individual Result View", icon: BarChart3, desc: "Grade-wise breakdown and GPA calculation for single PINs." },
-  { id: 3,  title: "Batch Result Hub", icon: Layout, desc: "Class-66 feature with PIN range fetching and stats." },
-  { id: 4,  title: "Debugging & Hardening", icon: Zap, desc: "CORS fixes, 403/404 resolution, and error resilience." },
-  { id: 5,  title: "Batch Registration", icon: Database, desc: "Automated student database creation from result data." },
-  { id: 6,  title: "Faculty Dashboard", icon: Filter, desc: "Pass/Fail grouping and multi-level sorting for class hubs." },
-  { id: 7,  title: "Data Perfection", icon: CheckCircle2, desc: "Internal/External breakdown and subject-wise accuracy." },
-  { id: 8,  title: "Strict Result Logic", icon: ShieldCheck, desc: "Enforcing FAIL status for missing GPA entries." },
-  { id: 9,  title: "Final Result Polish", icon: CheckCircle2, desc: "Handling 'P' and 'N' grades and finalized logic." },
-  { id: 10, title: "Storage & Resources", icon: Database, desc: "Master CSV export and student resource buckets." },
-  { id: 11, title: "User Management", icon: Layout, desc: "Admin User Creator and profile management." },
-  { id: 12, title: "Subject Management", icon: Filter, desc: "Dynamic subject creation and assignment tools." },
-  { id: 13, title: "Admin Role Fix", icon: ShieldCheck, desc: "Fixed dynamic role assignments and RLS recursion." },
-  { id: 14, title: "Multi-Section Support", icon: Layout, desc: "A, B, C section filtering for students and timetables." },
-  { id: 15, title: "Realtime & Google Auth", icon: Zap, desc: "Google OAuth integration and live data subscriptions." },
-  { id: 16, title: "Admin 2FA Protection", icon: Lock, desc: "MFA enforcement with TOTP for administrative accounts." },
-  { id: 17, title: "Attendance Linkage", icon: Clock, desc: "Connecting Timetable slots to Digital Register for 1-click marking." },
+const FEATURES = [
+  { id: 1, title: "SBTET Scraper", icon: Cloud, desc: "Automated result fetching from official boards.", path: 'results' },
+  { id: 2, title: "GPA Analytics", icon: BarChart3, desc: "Subject-wise grade breakdown and SGPA calculation.", path: 'results' },
+  { id: 3, title: "Resource Library", icon: BookOpen, desc: "LMS for syllabus, notes, and previous papers.", path: 'lms' },
+  { id: 4, title: "Digital Register", icon: UserCheck, desc: "Attendance marking with curriculum topic linkage.", path: 'management' },
+  { id: 5, title: "Academic Calendar", icon: Calendar, desc: "Institutional event tracking and holiday planning.", path: 'calendar' },
+  { id: 6, title: "Real-time Hub", icon: MessageSquare, desc: "Live chat rooms for subjects and sections.", path: 'hub' },
+  { id: 7, title: "MFA Gatekeeper", icon: Lock, desc: "TOTP-based 2FA for administrative security.", path: 'profile' },
+  { id: 8, title: "Notice Board", icon: Zap, desc: "Instant circulars and institutional announcements.", path: 'calendar' },
+  { id: 9, title: "Profile Dashboard", icon: Layout, desc: "Self-service user profile maintenance.", path: 'management' },
+  { id: 10, title: "Subject Manager", icon: ShieldCheck, desc: "Dynamic curriculum and subject assignment.", path: 'management' },
+  { id: 11, title: "Batch Processor", icon: Database, desc: "Import 60+ student results in a single click.", path: 'results' },
+  { id: 12, title: "Legacy Repair", icon: Zap, desc: "Automated DB recovery and column syncing tools.", path: 'management' },
 ]
 
-export default function ProjectStatus() {
+export default function ProjectStatus({ setTab }) {
   return (
     <div className="space-y-8">
       <header>
-        <h2 className="text-3xl font-black text-[#272A6F]">Nexus GIET Evolution</h2>
-        <p className="text-gray-500 mt-1">Live project status and development timeline across 17 technical phases.</p>
+        <h2 className="text-3xl font-black text-[#272A6F]">Nexus GIET Features</h2>
+        <p className="text-gray-500 mt-1">Live status of active ERP modules. Click any feature to explore.</p>
       </header>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-        {PHASES.map((p) => {
-          const Icon = p.icon
+        {FEATURES.map((f) => {
+          const Icon = f.icon
           return (
-            <div key={p.id} className="group relative bg-white border border-indigo-100 p-6 rounded-[2.5rem] overflow-hidden transition-all hover:scale-[1.03] hover:shadow-[0_20px_50px_rgba(39,42,111,0.1)] cursor-default">
+            <div key={f.id} 
+              onClick={() => setTab && setTab(f.path)}
+              className="group relative bg-white border border-indigo-100 p-6 rounded-[2.5rem] overflow-hidden transition-all hover:scale-[1.03] hover:shadow-[0_20px_50px_rgba(39,42,111,0.1)] cursor-pointer active:scale-95">
               {/* Background gradient effect */}
               <div className="absolute -top-10 -right-10 w-32 h-32 bg-indigo-500/5 blur-[60px] group-hover:bg-indigo-500/15 transition-all" />
               
@@ -41,22 +38,21 @@ export default function ProjectStatus() {
                 <div className="w-12 h-12 bg-indigo-50 rounded-2xl flex items-center justify-center group-hover:bg-indigo-100 transition-colors">
                   <Icon className="text-indigo-400 group-hover:text-indigo-600 transition-colors" size={24} />
                 </div>
-                <span className="text-[10px] font-black tracking-widest text-[#272A6F]/20 uppercase">Phase {p.id.toString().padStart(2, '0')}</span>
+                <span className="text-[10px] font-black tracking-widest text-[#272A6F]/20 uppercase">Module {f.id.toString().padStart(2, '0')}</span>
               </div>
 
-              <h4 className="text-lg font-bold text-[#272A6F] mb-2">{p.title}</h4>
+              <h4 className="text-lg font-bold text-[#272A6F] mb-2">{f.title}</h4>
               <p className="text-sm text-gray-400 leading-relaxed min-h-[3rem] line-clamp-2 italic">
-                {p.desc}
+                {f.desc}
               </p>
 
               <div className="mt-6 flex items-center space-x-2">
                 <div className="h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse" />
-                <span className="text-[10px] font-bold text-green-600 uppercase tracking-tighter">Verified & Stable</span>
+                <span className="text-[10px] font-bold text-green-600 uppercase tracking-tighter">Verified & Live</span>
               </div>
 
-              {/* Decorative accent */}
               <div className="absolute bottom-6 right-6 opacity-0 group-hover:opacity-100 transition-opacity">
-                <CheckCircle2 size={16} className="text-indigo-600/20" />
+                <ShieldCheck size={16} className="text-indigo-600/40" />
               </div>
             </div>
           )

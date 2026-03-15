@@ -69,10 +69,10 @@ MENU.vice_principal = MENU.admin
 MENU.hod = MENU.admin
 MENU.class_teacher = MENU.faculty
 
-function RoleView({ tab, profile, prefill, onPrefillClear }) {
+function RoleView({ tab, profile, prefill, onPrefillClear, setTab }) {
   const isStaff = ['admin', 'principal', 'vice_principal', 'hod', 'faculty', 'class_teacher'].includes(profile?.role)
   switch (tab) {
-    case 'dashboard':    return isStaff ? <ProjectStatus /> : <StudentDashboard profile={profile} />
+    case 'dashboard':    return isStaff ? <ProjectStatus setTab={setTab} /> : <StudentDashboard profile={profile} />
     case 'sbtet':        return <SBTETResults profile={profile} />
     case 'fees':         return <FinanceBridge profile={profile} />
     case 'register':     return <FacultyRegister profile={profile} prefill={prefill} onPrefillClear={onPrefillClear} />
@@ -219,6 +219,7 @@ export default function App() {
                   setPrefill(null)
                 }
               }}
+              setTab={setActiveTab}
             />
           )}
           {!profile && (
