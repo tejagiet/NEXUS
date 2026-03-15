@@ -4,7 +4,7 @@ import { ToggleLeft, ToggleRight, Save, User2, MessageSquarePlus, Inbox, Loader2
 
 const BRANCHES = ['CME', 'ECE', 'EEE', 'ME', 'CIVIL', 'AI', 'IT', 'CSE']
 const SECTIONS = ['A', 'B', 'C', 'D']
-const ROLES = ['student', 'faculty', 'admin']
+const ROLES = ['student', 'faculty', 'admin', 'principal', 'vice_principal', 'hod', 'class_teacher']
 
 export default function ManagementSuite({ profile, prefill, onPrefillClear }) {
   const [activeTab, setActiveTab] = useState('users')
@@ -15,7 +15,8 @@ export default function ManagementSuite({ profile, prefill, onPrefillClear }) {
     { id: 'feedback', label: 'Nexus Inbox',       icon: Inbox },
     ...(profile?.role === 'admin' ? [
       { id: 'users', label: 'User Creator', icon: UserPlus },
-      { id: 'subjects', label: 'Subject Manager', icon: BookMarked }
+      { id: 'subjects', label: 'Subject Manager', icon: BookMarked },
+      { id: 'roles', label: 'Role Manager', icon: KeyRound }
     ] : []),
   ]
   // Students see a feedback submit tab instead of admin tabs
@@ -38,6 +39,7 @@ export default function ManagementSuite({ profile, prefill, onPrefillClear }) {
           {[
             { id: 'register', label: 'Attendance', icon: ToggleRight },
             { id: 'users',    label: 'Accounts',   icon: Users },
+            { id: 'roles',    label: 'Roles',      icon: KeyRound },
             { id: 'subjects', label: 'Subjects',   icon: BookOpen },
             { id: 'feedback', label: 'Feedback',   icon: MessageSquare },
           ].map(t => (
@@ -73,6 +75,7 @@ export default function ManagementSuite({ profile, prefill, onPrefillClear }) {
         {activeTab === 'feedback' && <FeedbackInbox profile={profile} />}
         {activeTab === 'users'    && <AdminUserCreator profile={profile} setDatabaseSyncError={setDatabaseSyncError} />}
         {activeTab === 'subjects' && <SubjectManager profile={profile} setDatabaseSyncError={setDatabaseSyncError} />}
+        {activeTab === 'roles'    && <RoleManager profile={profile} setDatabaseSyncError={setDatabaseSyncError} />}
       </div>
     </div>
   )
@@ -929,6 +932,128 @@ function SubjectManager({ profile, setDatabaseSyncError }) {
           </div>
         )}
       </div>
+    </div>
+  )
+}
+/* ── Role Manager ─────────────────────────────────── */
+function RoleManager({ profile, setDatabaseSyncError }) {
+  const [users, setUsers] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [search, setSearch] = useState('')
+  const [updating, setUpdating] = useState(null) // userId being updated
+
+  useEffect(() => {
+    fetchUsers()
+  }, [])
+
+  async function fetchUsers() {
+    setLoading(true)
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('id, full_name, role, pin_number, email')
+      .order('full_name', { ascending: true })
+    if (error) setDatabaseSyncError(error.message)
+    else setUsers(data || [])
+    setLoading(false)
+  }
+
+  async function updateRole(userId, newRole) {
+    setUpdating(userId)
+    const { error } = await supabase
+      .from('profiles')
+      .update({ role: newRole })
+      .eq('id', userId)
+    
+    if (error) {
+      alert("Failed to update role: " + error.message)
+    } else {
+      setUsers(prev => prev.map(u => u.id === userId ? { ...u, role: newRole } : u))
+    }
+    setUpdating(null)
+  }
+
+  const filtered = users.filter(u => 
+    u.full_name?.toLowerCase().includes(search.toLowerCase()) ||
+    u.pin_number?.toLowerCase().includes(search.toLowerCase()) ||
+    u.email?.toLowerCase().includes(search.toLowerCase())
+  )
+
+  const roleColors = {
+    admin: 'bg-red-500 text-white',
+    principal: 'bg-orange-600 text-white',
+    vice_principal: 'bg-orange-500 text-white',
+    hod: 'bg-purple-600 text-white',
+    class_teacher: 'bg-blue-600 text-white',
+    faculty: 'bg-blue-500 text-white',
+    student: 'bg-gray-500 text-white'
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center space-x-3">
+          <div className="w-10 h-10 bg-[#272A6F] rounded-xl flex items-center justify-center text-white shadow-lg">
+            <KeyRound size={20} />
+          </div>
+          <div>
+            <h3 className="text-lg font-black text-[#272A6F]">Role Manager</h3>
+            <p className="text-xs text-gray-400 font-bold uppercase tracking-widest">Manage staff and student permissions</p>
+          </div>
+        </div>
+      </div>
+
+      <div className="relative">
+        <Users className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+        <input 
+          type="text" 
+          value={search} 
+          onChange={e => setSearch(e.target.value)}
+          placeholder="Search by Name, PIN or Email..."
+          className="w-full bg-gray-50 border-2 border-gray-100 rounded-2xl py-3.5 pl-12 pr-4 text-sm font-bold focus:outline-none focus:border-[#272A6F] transition-all"
+        />
+      </div>
+
+      {loading ? (
+        <div className="flex justify-center py-12"><Loader2 className="animate-spin text-[#272A6F]" /></div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {filtered.map(u => (
+            <div key={u.id} className="p-5 bg-white border-2 border-gray-100 rounded-3xl hover:border-[#272A6F]/20 transition-all flex flex-col justify-between">
+              <div className="flex justify-between items-start mb-4">
+                <div className="flex items-center space-x-3">
+                  <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center text-xs font-black text-[#272A6F]">
+                    {u.full_name?.[0] || '?'}
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-[#272A6F] text-sm">{u.full_name}</h4>
+                    <p className="text-[10px] font-mono font-bold text-gray-400">{u.pin_number || u.email}</p>
+                  </div>
+                </div>
+                <div className={`text-[10px] font-black px-2 py-1 rounded-md uppercase tracking-wider ${roleColors[u.role] || 'bg-gray-100 text-gray-500'}`}>
+                  {u.role?.replace('_', ' ')}
+                </div>
+              </div>
+              
+              <div className="pt-4 border-t border-gray-50">
+                <label className="block text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2">Change Institutional Role</label>
+                <div className="flex items-center space-x-2">
+                  <select 
+                    value={u.role} 
+                    disabled={updating === u.id}
+                    onChange={(e) => updateRole(u.id, e.target.value)}
+                    className="flex-1 bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-[#272A6F] disabled:opacity-50"
+                  >
+                    {ROLES.map(r => (
+                      <option key={r} value={r}>{r.replace('_', ' ').toUpperCase()}</option>
+                    ))}
+                  </select>
+                  {updating === u.id && <Loader2 className="animate-spin text-[#272A6F]" size={16} />}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

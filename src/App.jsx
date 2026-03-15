@@ -51,8 +51,14 @@ const MENU = {
   ],
 }
 
+// 🏛️ Map Institutional Roles to Base Menus
+MENU.principal = MENU.admin
+MENU.vice_principal = MENU.admin
+MENU.hod = MENU.admin
+MENU.class_teacher = MENU.faculty
+
 function RoleView({ tab, profile, prefill, onPrefillClear }) {
-  const isStaff = profile?.role === 'faculty' || profile?.role === 'admin'
+  const isStaff = ['admin', 'principal', 'vice_principal', 'hod', 'faculty', 'class_teacher'].includes(profile?.role)
   switch (tab) {
     case 'dashboard':    return isStaff ? <ProjectStatus /> : <StudentDashboard profile={profile} />
     case 'sbtet':        return <SBTETResults profile={profile} />
