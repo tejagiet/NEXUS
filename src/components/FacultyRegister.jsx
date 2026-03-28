@@ -27,17 +27,17 @@ export default function FacultyRegister({ profile, prefill, onPrefillClear }) {
   async function fetchData() {
     setLoading(true)
     try {
-      const [{ data: sub, error: subErr }, { data: fac, error: facErr }, { data: stuData, error: stuErr }] = await Promise.all([
+      const [{ data: sub, error: subErr }, { data: fac, error: facErr }, { data: profileStu, error: profileStuErr }] = await Promise.all([
         supabase.from('subjects').select('*, profiles(full_name)').order('branch', { ascending: true }),
         supabase.from('profiles').select('id, full_name').eq('role', 'faculty'),
-        supabase.from('students').select('*').order('pin_number', { ascending: true })
+        supabase.from('profiles').select('id, full_name, pin_number, branch, section, role, roles').or('role.eq.student,roles.cs.{"student"}').order('pin_number', { ascending: true })
       ])
       
-      if (subErr || facErr || stuErr) throw (subErr || facErr || stuErr)
+      if (subErr || facErr || profileStuErr) throw (subErr || facErr || profileStuErr)
       
       setSubjects(sub || [])
       setFaculty(fac || [])
-      setStudents(stuData || [])
+      setStudents(profileStu || [])
 
       if (sub?.length > 0) {
         const initialSubId = prefill?.subjectId || sub[0].id
