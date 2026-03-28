@@ -49,16 +49,16 @@ export default function NoticeBoard({ profile }) {
   const filteredNotices = notices.filter(n => {
     // Admins and Principals see all notices regardless of broadcast targets
     const isAdmin = userRoles.some(r => ['admin', 'principal', 'vice_principal'].includes(r))
-    
+
     // Category Filter
     if (activeCategory !== 'All' && n.category !== activeCategory) return false
 
     if (isAdmin) return true
-    
+
     // Strict Target Checks
     if (n.target_role !== 'ALL' && !userRoles.includes(n.target_role)) return false
     if (n.target_branch !== 'ALL' && n.target_branch !== profile.branch) return false
-    
+
     return true
   })
 
@@ -75,7 +75,7 @@ export default function NoticeBoard({ profile }) {
           </div>
         </div>
         {canPost && (
-          <button onClick={() => setShowAdd(!showAdd)} 
+          <button onClick={() => setShowAdd(!showAdd)}
             className="flex items-center space-x-2 px-6 py-3 bg-[#272A6F] text-white rounded-2xl text-sm font-black hover:shadow-2xl transition-all active:scale-95">
             {showAdd ? <X size={18} /> : <Plus size={18} />}
             <span>{showAdd ? 'Close' : 'Post New Notice'}</span>
@@ -93,7 +93,7 @@ export default function NoticeBoard({ profile }) {
                   placeholder="e.g. Mid-Term Exam Rescheduled"
                   className="w-full bg-white border-2 border-gray-100 rounded-2xl px-5 py-3.5 text-sm font-bold focus:border-[#272A6F] outline-none transition-all shadow-sm" />
               </div>
-              
+
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-[10px] font-black uppercase text-gray-400 mb-2 px-1">Notice Category</label>
@@ -119,8 +119,8 @@ export default function NoticeBoard({ profile }) {
                 <label className="block text-[10px] font-black uppercase text-gray-400 mb-2 px-1">Target Branch</label>
                 <select value={newNotice.target_branch} onChange={e => setNewNotice({ ...newNotice, target_branch: e.target.value })}
                   className="w-full bg-white border-2 border-gray-100 rounded-xl px-4 py-3 text-sm font-bold outline-none focus:border-[#272A6F] transition-all">
-                  <option value="ALL">All Information Technology Branches</option>
-                  {['CME','ECE','EEE','ME','CIVIL','AI','IT','CSE'].map(b => <option key={b} value={b}>{b} Department</option>)}
+                  <option value="ALL">All Branches</option>
+                  {['CME', 'ECE', 'EEE', 'ME', 'CIVIL', 'AI', 'IT', 'CSE'].map(b => <option key={b} value={b}>{b} Department</option>)}
                 </select>
               </div>
             </div>
@@ -128,7 +128,7 @@ export default function NoticeBoard({ profile }) {
             <div className="flex flex-col">
               <label className="block text-[10px] font-black uppercase text-gray-400 mb-2 px-1">Detailed Content</label>
               <textarea required value={newNotice.content} onChange={e => setNewNotice({ ...newNotice, content: e.target.value })}
-                placeholder="Write detailed notice here..." 
+                placeholder="Write detailed notice here..."
                 className="flex-1 w-full bg-white border-2 border-gray-100 rounded-[2rem] px-6 py-5 text-sm font-medium focus:border-[#272A6F] outline-none transition-all resize-none shadow-sm min-h-[200px]" />
             </div>
           </div>
@@ -146,11 +146,10 @@ export default function NoticeBoard({ profile }) {
           <button
             key={cat}
             onClick={() => setActiveCategory(cat)}
-            className={`px-6 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-sm ${
-              activeCategory === cat 
-                ? 'bg-[#272A6F] text-white shadow-[#272A6F]/20' 
+            className={`px-6 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-sm ${activeCategory === cat
+                ? 'bg-[#272A6F] text-white shadow-[#272A6F]/20'
                 : 'bg-white text-gray-400 hover:text-gray-600'
-            }`}
+              }`}
           >
             {cat}
           </button>
@@ -177,23 +176,22 @@ export default function NoticeBoard({ profile }) {
                   <span className="text-[10px] font-black px-3 py-1 rounded-full bg-gray-50 text-gray-400 uppercase tracking-widest border border-gray-100">
                     {n.target_branch}
                   </span>
-                  <span className={`text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-widest ${
-                    n.category === 'Academics' ? 'bg-amber-100 text-amber-700' : 
-                    n.category === 'Events' ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-400'
-                  }`}>
+                  <span className={`text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-widest ${n.category === 'Academics' ? 'bg-amber-100 text-amber-700' :
+                      n.category === 'Events' ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-400'
+                    }`}>
                     {n.category || 'General'}
                   </span>
                 </div>
-                { (profile.id === n.author_id || userRoles.includes('admin')) && (
+                {(profile.id === n.author_id || userRoles.includes('admin')) && (
                   <button onClick={() => deleteNotice(n.id)} className="p-2 text-gray-200 hover:text-red-500 transition-colors">
                     <Trash2 size={16} />
                   </button>
                 )}
               </div>
-              
+
               <h3 className="text-xl font-black text-[#272A6F] mb-4 leading-tight group-hover:text-blue-600 transition-colors">{n.title}</h3>
               <p className="text-sm text-gray-600 font-medium leading-relaxed whitespace-pre-wrap">{n.content}</p>
-              
+
               <div className="mt-8 pt-6 border-t border-gray-50 flex items-center justify-between">
                 <div className="flex items-center space-x-3">
                   <div className="w-8 h-8 rounded-full bg-[#272A6F]/5 flex items-center justify-center text-[#272A6F] font-black text-[10px]">
