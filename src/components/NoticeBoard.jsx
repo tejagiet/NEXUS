@@ -6,10 +6,12 @@ export default function NoticeBoard({ profile }) {
   const [notices, setNotices] = useState([])
   const [loading, setLoading] = useState(true)
   const [showAdd, setShowAdd] = useState(false)
-  const [newNotice, setNewNotice] = useState({ title: '', content: '', target_role: 'ALL', target_branch: 'ALL' })
+  const [newNotice, setNewNotice] = useState({ title: '', content: '', target_role: 'ALL', target_branch: 'ALL', category: 'General' })
+  const [activeCategory, setActiveCategory] = useState('All')
   const [saving, setSaving] = useState(false)
 
-  const canPost = ['admin', 'principal', 'hod', 'faculty'].includes(profile?.role)
+  const userRoles = profile?.roles || [profile?.role] || []
+  const canPost = userRoles.some(r => ['admin', 'principal', 'hod', 'faculty', 'vice_principal'].includes(r))
 
   useEffect(() => {
     fetchNotices()
@@ -32,7 +34,7 @@ export default function NoticeBoard({ profile }) {
     })
     if (error) alert(error.message)
     else {
-      setShowAdd(false); setNewNotice({ title: '', content: '', target_role: 'ALL', target_branch: 'ALL' }); fetchNotices()
+      setShowAdd(false); setNewNotice({ title: '', content: '', target_role: 'ALL', target_branch: 'ALL', category: 'General' }); fetchNotices()
     }
     setSaving(false)
   }
@@ -43,11 +45,20 @@ export default function NoticeBoard({ profile }) {
     fetchNotices()
   }
 
-  // Filter notices for students
+  // Filter notices for students and staff
   const filteredNotices = notices.filter(n => {
-    if (profile.role === 'admin' || profile.role === 'principal') return true
-    if (n.target_role !== 'ALL' && n.target_role !== profile.role) return false
+    // Admins and Principals see all notices regardless of broadcast targets
+    const isAdmin = userRoles.some(r => ['admin', 'principal', 'vice_principal'].includes(r))
+    
+    // Category Filter
+    if (activeCategory !== 'All' && n.category !== activeCategory) return false
+
+    if (isAdmin) return true
+    
+    // Strict Target Checks
+    if (n.target_role !== 'ALL' && !userRoles.includes(n.target_role)) return false
     if (n.target_branch !== 'ALL' && n.target_branch !== profile.branch) return false
+    
     return true
   })
 
@@ -74,39 +85,51 @@ export default function NoticeBoard({ profile }) {
 
       {showAdd && (
         <form onSubmit={postNotice} className="glass rounded-[2rem] p-8 space-y-6 border-2 border-dashed border-[#272A6F]/20 animate-in slide-in-from-top duration-300">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <div className="space-y-6">
               <div>
-                <label className="block text-[10px] font-black uppercase text-gray-400 mb-2">Notice Title</label>
+                <label className="block text-[10px] font-black uppercase text-gray-400 mb-2 px-1">Notice Title</label>
                 <input required value={newNotice.title} onChange={e => setNewNotice({ ...newNotice, title: e.target.value })}
                   placeholder="e.g. Mid-Term Exam Rescheduled"
-                  className="w-full bg-white border-2 border-gray-100 rounded-2xl px-5 py-3.5 text-sm font-bold focus:border-[#272A6F] outline-none transition-all" />
+                  className="w-full bg-white border-2 border-gray-100 rounded-2xl px-5 py-3.5 text-sm font-bold focus:border-[#272A6F] outline-none transition-all shadow-sm" />
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-[10px] font-black uppercase text-gray-400 mb-2">Target Role</label>
+                  <label className="block text-[10px] font-black uppercase text-gray-400 mb-2 px-1">Notice Category</label>
+                  <select value={newNotice.category} onChange={e => setNewNotice({ ...newNotice, category: e.target.value })}
+                    className="w-full bg-white border-2 border-gray-100 rounded-xl px-4 py-3 text-sm font-bold outline-none focus:border-[#272A6F] transition-all">
+                    <option value="General">General</option>
+                    <option value="Academics">Academics</option>
+                    <option value="Events">Events</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-black uppercase text-gray-400 mb-2 px-1">Target Audience</label>
                   <select value={newNotice.target_role} onChange={e => setNewNotice({ ...newNotice, target_role: e.target.value })}
-                    className="w-full bg-white border-2 border-gray-100 rounded-xl px-4 py-3 text-sm font-bold outline-none focus:border-[#272A6F]">
+                    className="w-full bg-white border-2 border-gray-100 rounded-xl px-4 py-3 text-sm font-bold outline-none focus:border-[#272A6F] transition-all">
                     <option value="ALL">All Users</option>
                     <option value="student">Students Only</option>
                     <option value="faculty">Faculty Only</option>
                   </select>
                 </div>
-                <div>
-                  <label className="block text-[10px] font-black uppercase text-gray-400 mb-2">Target Branch</label>
-                  <select value={newNotice.target_branch} onChange={e => setNewNotice({ ...newNotice, target_branch: e.target.value })}
-                    className="w-full bg-white border-2 border-gray-100 rounded-xl px-4 py-3 text-sm font-bold outline-none focus:border-[#272A6F]">
-                    <option value="ALL">All Branches</option>
-                    {['CME','ECE','EEE','ME','CIVIL','AI','IT','CSE'].map(b => <option key={b}>{b}</option>)}
-                  </select>
-                </div>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-black uppercase text-gray-400 mb-2 px-1">Target Branch</label>
+                <select value={newNotice.target_branch} onChange={e => setNewNotice({ ...newNotice, target_branch: e.target.value })}
+                  className="w-full bg-white border-2 border-gray-100 rounded-xl px-4 py-3 text-sm font-bold outline-none focus:border-[#272A6F] transition-all">
+                  <option value="ALL">All Information Technology Branches</option>
+                  {['CME','ECE','EEE','ME','CIVIL','AI','IT','CSE'].map(b => <option key={b} value={b}>{b} Department</option>)}
+                </select>
               </div>
             </div>
-            <div>
-              <label className="block text-[10px] font-black uppercase text-gray-400 mb-2">Notice Content</label>
+
+            <div className="flex flex-col">
+              <label className="block text-[10px] font-black uppercase text-gray-400 mb-2 px-1">Detailed Content</label>
               <textarea required value={newNotice.content} onChange={e => setNewNotice({ ...newNotice, content: e.target.value })}
-                placeholder="Write detailed notice here..." rows={6}
-                className="w-full bg-white border-2 border-gray-100 rounded-2xl px-5 py-4 text-sm font-bold focus:border-[#272A6F] outline-none transition-all resize-none" />
+                placeholder="Write detailed notice here..." 
+                className="flex-1 w-full bg-white border-2 border-gray-100 rounded-[2rem] px-6 py-5 text-sm font-medium focus:border-[#272A6F] outline-none transition-all resize-none shadow-sm min-h-[200px]" />
             </div>
           </div>
           <button type="submit" disabled={saving}
@@ -116,6 +139,23 @@ export default function NoticeBoard({ profile }) {
           </button>
         </form>
       )}
+
+      {/* Category Filter Pills */}
+      <div className="flex items-center space-x-3 bg-gray-50/50 p-2 rounded-2xl w-fit self-center md:self-start">
+        {['All', 'General', 'Academics', 'Events'].map(cat => (
+          <button
+            key={cat}
+            onClick={() => setActiveCategory(cat)}
+            className={`px-6 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-sm ${
+              activeCategory === cat 
+                ? 'bg-[#272A6F] text-white shadow-[#272A6F]/20' 
+                : 'bg-white text-gray-400 hover:text-gray-600'
+            }`}
+          >
+            {cat}
+          </button>
+        ))}
+      </div>
 
       {loading ? (
         <div className="flex justify-center py-20"><Loader2 className="animate-spin text-[#272A6F]" size={40} /></div>
@@ -137,8 +177,14 @@ export default function NoticeBoard({ profile }) {
                   <span className="text-[10px] font-black px-3 py-1 rounded-full bg-gray-50 text-gray-400 uppercase tracking-widest border border-gray-100">
                     {n.target_branch}
                   </span>
+                  <span className={`text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-widest ${
+                    n.category === 'Academics' ? 'bg-amber-100 text-amber-700' : 
+                    n.category === 'Events' ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-400'
+                  }`}>
+                    {n.category || 'General'}
+                  </span>
                 </div>
-                { (profile.id === n.author_id || profile.role === 'admin') && (
+                { (profile.id === n.author_id || userRoles.includes('admin')) && (
                   <button onClick={() => deleteNotice(n.id)} className="p-2 text-gray-200 hover:text-red-500 transition-colors">
                     <Trash2 size={16} />
                   </button>

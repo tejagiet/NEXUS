@@ -14,8 +14,17 @@ body {
     sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background-color: #f0f2f5;
-  color: var(--giet-navy);
+  background-color: #f8f9fa;
+  color: #2e3335;
+}
+
+/* Material Symbols Rules */
+.material-symbols-outlined {
+  font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+}
+
+.editorial-shadow {
+  box-shadow: 0px 12px 32px rgba(39, 42, 111, 0.06);
 }
 
 .glass {
