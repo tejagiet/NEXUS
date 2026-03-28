@@ -15,8 +15,8 @@ const TABS = [
   { id: 'feedback', label: 'Feedback', icon: MessageSquare, roles: ['admin', 'hod', 'principal', 'faculty', 'class_teacher', 'vice_principal', 'student'] },
 ]
 
-export default function ManagementSuite({ profile, prefill, onPrefillClear }) {
-  const [activeTab, setActiveTab] = useState(prefill?.tab || (profile?.role === 'student' ? 'profiles' : 'users'))
+export default function ManagementSuite({ profile, prefill, onPrefillClear, isStandalone = false }) {
+  const [activeTab, setActiveTab] = useState(isStandalone ? 'profiles' : (prefill?.tab || (profile?.role === 'student' ? 'profiles' : 'users')))
   const [databaseSyncError, setDatabaseSyncError] = useState(null)
 
   useEffect(() => {
@@ -27,6 +27,10 @@ export default function ManagementSuite({ profile, prefill, onPrefillClear }) {
 
   useEffect(() => {
     // 🏛️ Multi-Role Tab Initialization & Permission Sync
+    if (isStandalone) {
+      setActiveTab('profiles')
+      return
+    }
     const userRoles = profile?.roles || [profile?.role] || ['student']
     const currentTab = TABS.find(t => t.id === activeTab)
     const isAllowed = currentTab?.roles.some(r => userRoles.includes(r))
@@ -35,7 +39,7 @@ export default function ManagementSuite({ profile, prefill, onPrefillClear }) {
       const allowed = TABS.filter(t => t.roles.some(r => userRoles.includes(r)))
       if (allowed.length > 0) setActiveTab(allowed[0].id)
     }
-  }, [profile, activeTab])
+  }, [profile, activeTab, isStandalone])
 
   // Students see a feedback submit tab instead of admin tabs
   // No more hard redirect. Students get a focused Management Suite.
@@ -44,31 +48,33 @@ export default function ManagementSuite({ profile, prefill, onPrefillClear }) {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-black text-[#272A6F] flex items-center gap-3">
-            <ShieldCheck size={28} className="text-[#EFBE33]" />
-            Management Suite
-            <span className="text-[10px] bg-[#272A6F]/10 text-[#272A6F]/40 px-1.5 py-0.5 rounded-md font-mono">v3</span>
-          </h2>
-          <p className="text-gray-500 text-sm font-medium">Control center for students, subjects, and system health.</p>
+      {!isStandalone && (
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-2xl font-black text-[#272A6F] flex items-center gap-3">
+              <ShieldCheck size={28} className="text-[#EFBE33]" />
+              Management Suite
+              <span className="text-[10px] bg-[#272A6F]/10 text-[#272A6F]/40 px-1.5 py-0.5 rounded-md font-mono">v3</span>
+            </h2>
+            <p className="text-gray-500 text-sm font-medium">Control center for students, subjects, and system health.</p>
+          </div>
+          <div className="flex bg-gray-100 p-1 rounded-2xl border border-gray-200 shadow-inner overflow-x-auto max-w-full">
+            {TABS.filter(t => t.roles.some(r => (profile?.roles || [profile?.role]).includes(r))).map(t => (
+              <button
+                key={t.id}
+                onClick={() => setActiveTab(t.id)}
+                className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-xs font-black transition-all whitespace-nowrap ${activeTab === t.id
+                    ? 'bg-white text-[#272A6F] shadow-lg scale-105'
+                    : 'text-gray-400 hover:text-gray-600'
+                  }`}
+              >
+                <t.icon size={14} />
+                <span>{t.label}</span>
+              </button>
+            ))}
+          </div>
         </div>
-        <div className="flex bg-gray-100 p-1 rounded-2xl border border-gray-200 shadow-inner overflow-x-auto max-w-full">
-          {TABS.filter(t => t.roles.some(r => (profile?.roles || [profile?.role]).includes(r))).map(t => (
-            <button
-              key={t.id}
-              onClick={() => setActiveTab(t.id)}
-              className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-xs font-black transition-all whitespace-nowrap ${activeTab === t.id
-                  ? 'bg-white text-[#272A6F] shadow-lg scale-105'
-                  : 'text-gray-400 hover:text-gray-600'
-                }`}
-            >
-              <t.icon size={14} />
-              <span>{t.label}</span>
-            </button>
-          ))}
-        </div>
-      </div>
+      )}
 
       {databaseSyncError && (
         <div className="p-4 bg-amber-50 border-2 border-amber-200 rounded-2xl flex items-start space-x-3 text-amber-700 shadow-xl shadow-amber-900/5 animate-bounce-subtle">
@@ -87,7 +93,7 @@ export default function ManagementSuite({ profile, prefill, onPrefillClear }) {
             case 'subjects': return <SubjectManager profile={profile} setDatabaseSyncError={setDatabaseSyncError} />
             case 'roles': return <RoleManager profile={profile} setDatabaseSyncError={setDatabaseSyncError} />
             case 'curriculum': return <CurriculumManager profile={profile} setDatabaseSyncError={setDatabaseSyncError} />
-            case 'profiles': return <ProfileEditor profile={profile} setDatabaseSyncError={setDatabaseSyncError} />
+            case 'profiles': return <ProfileEditor profile={profile} setDatabaseSyncError={setDatabaseSyncError} isStandalone={isStandalone} />
             case 'feedback': return isStudent ? <StudentFeedback profile={profile} /> : <FeedbackInbox profile={profile} />
             default: return null
           }
@@ -98,11 +104,11 @@ export default function ManagementSuite({ profile, prefill, onPrefillClear }) {
 }
 
 /* ── Profile Editor ───────────────────────────────── */
-function ProfileEditor({ profile }) {
+function ProfileEditor({ profile, isStandalone = false }) {
   const userRoles = profile?.roles || [profile?.role] || []
   const isAdmin = userRoles.some(r => ['admin', 'principal', 'vice_principal', 'hod'].includes(r))
   const isFaculty = userRoles.some(r => r === 'faculty' || r === 'class_teacher')
-  const isStaff = isAdmin || isFaculty
+  const isStaff = (isAdmin || isFaculty) && !isStandalone
 
   const [students, setStudents] = useState([])
   const [search, setSearch] = useState('')
@@ -229,7 +235,14 @@ function ProfileEditor({ profile }) {
         </div>
       )}
 
-      <div className={`${isStaff ? 'lg:col-span-2' : 'col-span-full'} space-y-6`}>
+      <div className={`${isStaff ? 'lg:col-span-2' : 'col-span-full'} space-y-8`}>
+        {isStandalone && (
+          <div className="mb-10 animate-in slide-in-from-left duration-500">
+             <h1 className="text-4xl font-black text-[#272A6F] mb-2">My Institutional Identity</h1>
+             <p className="text-gray-400 font-bold uppercase tracking-[0.2em] text-[10px]">Secure Profile & Configuration</p>
+          </div>
+        )}
+
         {selected ? (
           <div className="glass rounded-[2.5rem] p-8 border-2 border-[#272A6F]/5 relative overflow-hidden">
             <div className="flex flex-col md:flex-row items-center md:items-start space-x-0 md:space-x-8 mb-10 pb-10 border-b border-gray-100">
@@ -312,10 +325,41 @@ function ProfileEditor({ profile }) {
             </div>
 
             <button onClick={saveProfile} disabled={saving}
-              className="w-full h-16 flex items-center justify-center space-x-3 bg-[#272A6F] text-white rounded-[1.5rem] font-black text-sm hover:shadow-2xl hover:-translate-y-1 transition-all active:scale-[0.98] disabled:opacity-50 shadow-lg shadow-[#272A6F]/20">
+              className="w-full h-16 flex items-center justify-center space-x-3 bg-[#272A6F] text-white rounded-[1.5rem] font-black text-sm hover:shadow-2xl hover:-translate-y-1 transition-all active:scale-[0.98] disabled:opacity-50 shadow-lg shadow-[#272A6F]/20 mb-8">
               {saving ? <Loader2 className="animate-spin" size={20} /> : saved ? <CheckCircle2 size={20} className="text-[#EFBE33]" /> : <Save size={20} />}
               <span className="uppercase tracking-[0.1em]">{saved ? 'Profile Vault Updated!' : 'Commit Changes to Nexus'}</span>
             </button>
+
+            {isStandalone && (
+              <div className="pt-10 border-t border-gray-100 animate-in fade-in slide-in-from-bottom duration-700">
+                <div className="flex items-center space-x-2 mb-6">
+                  <ShieldCheck size={18} className="text-[#EFBE33]" />
+                  <h4 className="text-sm font-black text-[#272A6F] uppercase tracking-widest">Institutional Identity</h4>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="bg-gray-50/50 p-6 rounded-[2rem] border border-gray-100">
+                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Primary Designation</p>
+                    <p className="text-sm font-bold text-[#272A6F] capitalize">{profile?.role?.replace('_', ' ')}</p>
+                  </div>
+                  <div className="bg-gray-50/50 p-6 rounded-[2rem] border border-gray-100">
+                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Department / Branch</p>
+                    <p className="text-sm font-bold text-[#272A6F]">{profile?.branch || 'General Administration'}</p>
+                  </div>
+                  <div className="bg-gray-50/50 p-6 rounded-[2rem] border border-gray-100">
+                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Assigned Multi-Roles</p>
+                    <div className="flex flex-wrap gap-2 mt-2">
+                      {profile?.roles?.length > 0 ? profile.roles.map(r => (
+                        <span key={r} className="px-2.5 py-1 bg-[#272A6F] text-white rounded-lg text-[9px] font-black uppercase tracking-wider">{r}</span>
+                      )) : <span className="text-xs text-gray-400 font-medium italic">No secondary roles assigned</span>}
+                    </div>
+                  </div>
+                  <div className="bg-gray-50/50 p-6 rounded-[2rem] border border-gray-100">
+                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">System Identifier</p>
+                    <p className="text-[10px] font-mono font-bold text-gray-300 break-all">{profile?.id}</p>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         ) : (
           <div className="flex flex-col items-center justify-center py-24 bg-gray-50 rounded-[3rem] border-2 border-dashed border-gray-200">
@@ -590,15 +634,18 @@ function AdminUserCreator({ profile, setDatabaseSyncError }) {
       if (authErr) throw authErr
       const userId = authData.user?.id
       if (userId) {
-        await supabase.from('profiles').upsert({
+        // 1. Primary Profile Creation
+        const { error: profileError } = await supabase.from('profiles').upsert({
           id: userId, full_name: form.full_name.trim(), email: finalEmail,
           pin_number: form.pin_number.trim(), branch: form.branch, roles: form.roles,
           section: form.roles.includes('student') ? form.section : null
         }, { onConflict: 'id' })
+        
+        if (profileError) throw new Error(`Profile Sync Failed: ${profileError.message}`)
 
-        // 🔗 NEW: Sync to students table for attendance tracking
+        // 2. Academic Record Synchronization (Students Table)
         if (form.roles.includes('student')) {
-          await supabase.from('students').upsert({
+          const { error: studentError } = await supabase.from('students').upsert({
             full_name: form.full_name.trim(),
             pin_number: form.pin_number.trim(),
             branch: form.branch,

@@ -94,7 +94,7 @@ function RoleView({ tab, profile, prefill, onPrefillClear, setTab }) {
     case 'cctv':         return <CCTVMonitor profile={profile} />
     case 'mfa':          return <MFASetup profile={profile} />
     case 'mgmt':         return <ManagementSuite profile={profile} prefill={prefill} onPrefillClear={onPrefillClear} />
-    case 'profile':      return <ManagementSuite profile={profile} prefill={{ tab: 'profiles' }} onPrefillClear={onPrefillClear} />
+    case 'profile':      return <ManagementSuite profile={profile} prefill={{ tab: 'profiles' }} onPrefillClear={onPrefillClear} isStandalone={true} />
     case 'timetable':    return <SmartTimetable profile={profile} onMarkAttendance={(subId) => onPrefillClear(subId)} />
     case 'calendar':     return <AcademicCalendar profile={profile} />
     case 'notices':      return <NoticeBoard profile={profile} />
