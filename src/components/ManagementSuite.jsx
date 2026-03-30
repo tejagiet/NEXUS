@@ -1276,6 +1276,7 @@ function CurriculumManager({ profile, setDatabaseSyncError }) {
   const [subjects, setSubjects] = useState([])
   const [topics, setTopics] = useState([])
   const [selectedSub, setSelectedSub] = useState('')
+  const [selectedBranch, setSelectedBranch] = useState((profile?.roles || [profile?.role]).includes('hod') ? profile?.branch : 'CME')
   const [newTopic, setNewTopic] = useState({ title: '', description: '' })
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -1283,21 +1284,22 @@ function CurriculumManager({ profile, setDatabaseSyncError }) {
 
   useEffect(() => {
     fetchData()
-  }, [])
+  }, [selectedBranch])
 
   useEffect(() => {
     if (selectedSub) fetchTopics(selectedSub)
   }, [selectedSub])
 
   async function fetchData() {
-    let query = supabase.from('subjects').select('*').order('name')
-    if ((profile?.roles || [profile?.role]).includes('hod')) query = query.eq('branch', profile.branch)
+    setLoading(true)
+    let query = supabase.from('subjects').select('*').eq('branch', selectedBranch).order('name')
     
     const { data, error } = await query
     if (error) setDatabaseSyncError(error.message)
     else {
       setSubjects(data || [])
       if (data?.length) setSelectedSub(data[0].id)
+      else setSelectedSub('')
     }
     setLoading(false)
   }
@@ -1349,7 +1351,7 @@ function CurriculumManager({ profile, setDatabaseSyncError }) {
         // Subject Code, Subject Name, Topic Title, Topic Description, Order
         const data = rows.map(r => r.split(',').map(s => s.trim()))
         
-        const branch = profile.branch || 'CME'
+        const branch = selectedBranch || profile.branch || 'CME'
         
         // Group by subject
         const subjectsMap = {}
@@ -1404,9 +1406,25 @@ function CurriculumManager({ profile, setDatabaseSyncError }) {
           <div className="w-10 h-10 bg-[#272A6F] rounded-xl flex items-center justify-center text-white shadow-lg">
             <Layers size={20} />
           </div>
-          <div>
-            <h3 className="text-lg font-black text-[#272A6F]">Curriculum Manager</h3>
-            <p className="text-xs text-gray-400 font-bold uppercase tracking-widest">Define subject syllabi and track completion</p>
+          <div className="flex items-center gap-4">
+            <div>
+              <h3 className="text-lg font-black text-[#272A6F]">Curriculum Manager</h3>
+              <p className="text-xs text-gray-400 font-bold uppercase tracking-widest">Define subject syllabi and track completion</p>
+            </div>
+            
+            <div className="h-10 px-4 bg-indigo-50 border border-indigo-100 rounded-xl flex items-center gap-2">
+              <span className="text-[10px] font-black text-indigo-400 uppercase tracking-widest">Branch:</span>
+              <select 
+                value={selectedBranch} 
+                onChange={e => setSelectedBranch(e.target.value)}
+                disabled={(profile?.roles || [profile?.role]).includes('hod')}
+                className="bg-transparent text-indigo-700 font-black text-[10px] uppercase tracking-widest outline-none cursor-pointer"
+              >
+                {['CME', 'ECE', 'EEE', 'ME', 'CIVIL', 'AI', 'IT', 'CSE'].map(b => (
+                  <option key={b} value={b}>{b}</option>
+                ))}
+              </select>
+            </div>
           </div>
         </div>
         <div className="flex items-center space-x-3">
