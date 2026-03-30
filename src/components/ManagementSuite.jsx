@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
-import { ToggleLeft, ToggleRight, Save, User2, MessageSquarePlus, Inbox, Loader2, CheckCircle2, Phone, KeyRound, Send, UserPlus, Mail, Lock, BadgeCheck, Trash2, AlertCircle, BookOpen, BookMarked, Layers, FileSpreadsheet, Download, Upload, CloudUpload, ShieldCheck, AlertTriangle, Users, MessageSquare, User } from 'lucide-react'
+import { ToggleLeft, ToggleRight, Save, User2, MessageSquarePlus, Inbox, Loader2, CheckCircle2, Phone, KeyRound, Send, UserPlus, Mail, Lock, BadgeCheck, Trash2, AlertCircle, BookOpen, BookMarked, Layers, FileSpreadsheet, Download, Upload, CloudUpload, ShieldCheck, AlertTriangle, Users, MessageSquare, User, TrendingUp, Info } from 'lucide-react'
 
 const BRANCHES = ['CME', 'ECE', 'EEE', 'ME', 'CIVIL', 'AI', 'IT', 'CSE']
 const SECTIONS = ['A', 'B', 'C', 'D']
