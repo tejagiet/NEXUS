@@ -20,16 +20,45 @@ export default async function handler(req, res) {
     switch (action) {
       case 'select':
         sql = `SELECT ${select || '*'} FROM \`${table}\``;
+        let whereClauses = [];
+
+        // Standard Filters
         if (filters && filters.length > 0) {
-          const filterSql = filters.map(f => {
+          filters.forEach(f => {
             if (f.op === 'IN') {
               params.push(...f.value);
-              return `\`${f.column}\` IN (${f.value.map(() => '?').join(',')})`;
+              whereClauses.push(`\`${f.column}\` IN (${f.value.map(() => '?').join(',')})`);
+            } else {
+              params.push(f.value);
+              whereClauses.push(`\`${f.column}\` ${f.op} ?`);
             }
-            params.push(f.value);
-            return `\`${f.column}\` ${f.op} ?`;
-          }).join(' AND ');
-          sql += ` WHERE ${filterSql}`;
+          });
+        }
+
+        // Advanced OR Logic (Postgres-style string parsing)
+        if (or) {
+          const parts = or.split(',');
+          const orClauses = parts.map(part => {
+            const [col, op, ...valParts] = part.split('.');
+            const val = valParts.join('.'); // Handle dots in values if any
+            
+            if (op === 'eq') {
+              params.push(val);
+              return `\`${col}\` = ?`;
+            }
+            if (op === 'cs') { // JSON Contains check for multi-roles
+              // val is usually like '{"student"}' or just 'student'
+              const cleanVal = val.replace(/[{}]/g, '').replace(/"/g, '');
+              params.push(`"${cleanVal}"`);
+              return `JSON_CONTAINS(\`${col}\`, ?)`;
+            }
+            return '1=1'; // Fallback
+          });
+          whereClauses.push(`(${orClauses.join(' OR ')})`);
+        }
+
+        if (whereClauses.length > 0) {
+          sql += ` WHERE ${whereClauses.join(' AND ')}`;
         }
         if (order) sql += ` ORDER BY \`${order.column}\` ${order.dir}`;
         if (limit) sql += ` LIMIT ${limit}`;
@@ -81,7 +110,13 @@ export default async function handler(req, res) {
     }
 
     const [rows] = await pool.execute(sql, params);
-    return res.status(200).json({ data: rows, success: true });
+    
+    let count = null;
+    if (action === 'select' && req.body.count) {
+      count = rows.length; // Approximate count for single-query compatibility
+    }
+
+    return res.status(200).json({ data: rows, count, success: true });
   } catch (err) {
     console.error(`[TiDB Proxy Error] ${table}:`, err);
     return res.status(500).json({ error: err.message });

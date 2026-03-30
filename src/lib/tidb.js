@@ -17,11 +17,29 @@ export const tidb = {
     let _filters = [];
     let _order = null;
     let _limit = null;
+    let _maybeSingle = false;
+    let _single = false;
+    let _count = null;
+    let _or = null;
 
     const builder = {
-      select: (fields = '*') => { _select = fields; return builder; },
+      select: (fields = '*', options = {}) => { 
+        _select = fields; 
+        if (options.count) _count = options.count;
+        return builder; 
+      },
       eq: (column, value) => { _filters.push({ column, op: '=', value }); return builder; },
       in: (column, values) => { _filters.push({ column, op: 'IN', value: values }); return builder; },
+      not: (column, op, value) => { _filters.push({ column, op: `NOT ${op}`, value }); return builder; },
+      lt: (column, value) => { _filters.push({ column, op: '<', value }); return builder; },
+      gt: (column, value) => { _filters.push({ column, op: '>', value }); return builder; },
+      match: (obj) => { 
+        Object.entries(obj).forEach(([column, value]) => _filters.push({ column, op: '=', value }));
+        return builder; 
+      },
+      or: (query) => { _or = query; return builder; },
+      maybeSingle: () => { _maybeSingle = true; return builder; },
+      single: () => { _single = true; return builder; },
       order: (column, { ascending = true } = {}) => { _order = { column, dir: ascending ? 'ASC' : 'DESC' }; return builder; },
       limit: (n) => { _limit = n; return builder; },
       
@@ -35,13 +53,27 @@ export const tidb = {
               action: 'select', 
               select: _select, 
               filters: _filters, 
+              or: _or,
+              count: _count,
               order: _order, 
               limit: _limit 
             })
           });
           const json = await res.json();
           if (!res.ok) throw new Error(json.error || 'TiDB Fetch Error');
-          resolve({ data: json.data, error: null });
+          
+          let resultData = json.data;
+          
+          // Handle Single/MaybeSingle logic
+          if (_maybeSingle || _single) {
+            if (!resultData || resultData.length === 0) {
+              resultData = null;
+            } else {
+              resultData = resultData[0];
+            }
+          }
+
+          resolve({ data: resultData, error: null });
         } catch (err) {
           console.error(`[TiDB ${table}] Select Failed:`, err);
           resolve({ data: null, error: err });
