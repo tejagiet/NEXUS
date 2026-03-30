@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
-import { ToggleLeft, ToggleRight, Save, User2, MessageSquarePlus, Inbox, Loader2, CheckCircle2, Phone, KeyRound, Send, UserPlus, Mail, Lock, BadgeCheck, Trash2, AlertCircle, BookOpen, BookMarked, Layers, FileSpreadsheet, Download, Upload, CloudUpload, ShieldCheck, AlertTriangle, Users, MessageSquare, User, TrendingUp, Info } from 'lucide-react'
+import { ToggleLeft, ToggleRight, Save, User2, MessageSquarePlus, Inbox, Loader2, CheckCircle2, Phone, KeyRound, Send, UserPlus, Mail, Lock, BadgeCheck, Trash2, AlertCircle, BookOpen, BookMarked, Layers, FileSpreadsheet, Download, Upload, CloudUpload, ShieldCheck, AlertTriangle, Users, MessageSquare, User, TrendingUp, Info, XCircle, ChevronRight, Check } from 'lucide-react'
 
 const BRANCHES = ['CME', 'ECE', 'EEE', 'ME', 'CIVIL', 'AI', 'IT', 'CSE']
 const SECTIONS = ['A', 'B', 'C', 'D']
@@ -16,7 +16,7 @@ const TABS = [
   { id: 'feedback', label: 'Feedback', icon: MessageSquare, roles: ['admin', 'hod', 'principal', 'faculty', 'class_teacher', 'vice_principal', 'student'] },
 ]
 
-export default function ManagementSuite({ profile, prefill, onPrefillClear, isStandalone = false }) {
+export default function ManagementSuite({ profile, prefill, onPrefillClear, showToast, isStandalone = false }) {
   const [activeTab, setActiveTab] = useState(isStandalone ? 'profiles' : (prefill?.tab || (profile?.role === 'student' ? 'profiles' : 'users')))
   const [databaseSyncError, setDatabaseSyncError] = useState(null)
 
@@ -90,12 +90,12 @@ export default function ManagementSuite({ profile, prefill, onPrefillClear, isSt
       <div className="bg-white rounded-[2.5rem] p-4 lg:p-8 shadow-2xl shadow-[#272A6F]/5 border border-gray-100">
         {(() => {
           switch (activeTab) {
-            case 'users': return <AdminUserCreator profile={profile} setDatabaseSyncError={setDatabaseSyncError} />
-            case 'subjects': return <SubjectManager profile={profile} setDatabaseSyncError={setDatabaseSyncError} />
-            case 'roles': return <RoleManager profile={profile} setDatabaseSyncError={setDatabaseSyncError} />
-            case 'curriculum': return <CurriculumManager profile={profile} setDatabaseSyncError={setDatabaseSyncError} />
-            case 'promotion': return <PromotionManager profile={profile} setDatabaseSyncError={setDatabaseSyncError} />
-            case 'profiles': return <ProfileEditor profile={profile} setDatabaseSyncError={setDatabaseSyncError} isStandalone={isStandalone} />
+            case 'users': return <AdminUserCreator profile={profile} setDatabaseSyncError={setDatabaseSyncError} showToast={showToast} />
+            case 'subjects': return <SubjectManager profile={profile} setDatabaseSyncError={setDatabaseSyncError} showToast={showToast} />
+            case 'roles': return <RoleManager profile={profile} setDatabaseSyncError={setDatabaseSyncError} showToast={showToast} />
+            case 'curriculum': return <CurriculumManager profile={profile} setDatabaseSyncError={setDatabaseSyncError} showToast={showToast} />
+            case 'promotion': return <PromotionManager profile={profile} setDatabaseSyncError={setDatabaseSyncError} showToast={showToast} />
+            case 'profiles': return <ProfileEditor profile={profile} setDatabaseSyncError={setDatabaseSyncError} isStandalone={isStandalone} showToast={showToast} />
             case 'feedback': return isStudent ? <StudentFeedback profile={profile} /> : <FeedbackInbox profile={profile} />
             default: return null
           }
@@ -152,7 +152,7 @@ function ProfileEditor({ profile, isStandalone = false }) {
     
     // 🏛️ Enforce 1MB Limit
     if (file.size > 1024 * 1024) {
-      alert("Institutional Policy: Profile pictures must be under 1MB.")
+      showToast("Institutional Policy: Profile pictures must be under 1MB.", "error")
       return
     }
 
@@ -179,7 +179,7 @@ function ProfileEditor({ profile, isStandalone = false }) {
 
     } catch (err) {
       console.error("Institutional Asset Error:", err)
-      alert("Institutional Upload Failed: " + err.message)
+      showToast("Institutional Upload Failed: " + err.message, "error")
     } finally {
       setUploading(false)
     }
@@ -202,7 +202,7 @@ function ProfileEditor({ profile, isStandalone = false }) {
 
     const { error } = await supabase.from('profiles').update(updateData).eq('id', selected.id)
 
-    if (error) alert("Update failed: " + error.message)
+    if (error) showToast("Update failed: " + error.message, "error")
     else {
       setSaved(true)
       setTimeout(() => setSaved(false), 2000)
@@ -472,13 +472,12 @@ function StudentFeedback({ profile }) {
           <span>{sending ? 'Sending...' : 'Send to Principal'}</span>
         </button>
       </form>
-      ```
     </div>
   )
 }
 
 /* ── Admin User Creator ─────────────────────────── */
-function AdminUserCreator({ profile, setDatabaseSyncError }) {
+function AdminUserCreator({ profile, setDatabaseSyncError, showToast }) {
   const ROLES = ['student', 'faculty', 'admin', 'principal', 'vice_principal', 'hod', 'class_teacher']
   const BRANCHES = ['CME', 'ECE', 'EEE', 'ME', 'CIVIL', 'AI', 'IT', 'CSE']
   const SECTIONS = ['A', 'B', 'C']
@@ -848,7 +847,7 @@ function AdminUserCreator({ profile, setDatabaseSyncError }) {
 }
 
 /* ── Subject Manager ───────────────────────────── */
-function SubjectManager({ profile, setDatabaseSyncError }) {
+function SubjectManager({ profile, setDatabaseSyncError, showToast }) {
   const blank = { name: '', code: '', branch: 'CME', faculty_id: '' }
 
   const [form, setForm] = useState(blank)
@@ -1023,7 +1022,7 @@ function SubjectManager({ profile, setDatabaseSyncError }) {
                     onChange={async (e) => {
                       const newFac = e.target.value || null
                       const { error } = await supabase.from('subjects').update({ faculty_id: newFac }).eq('id', s.id)
-                      if (error) alert(error.message)
+                      if (error) showToast(error.message, "error")
                       else fetchData()
                     }}
                     className="w-full bg-gray-50 border border-gray-100 rounded-lg px-2 py-1.5 text-[11px] font-bold text-[#272A6F] focus:border-[#272A6F] outline-none"
@@ -1041,7 +1040,7 @@ function SubjectManager({ profile, setDatabaseSyncError }) {
   )
 }
 /* ── Role Manager ─────────────────────────────────── */
-function RoleManager({ profile, setDatabaseSyncError }) {
+function RoleManager({ profile, setDatabaseSyncError, showToast }) {
   const [users, setUsers] = useState([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
@@ -1064,7 +1063,7 @@ function RoleManager({ profile, setDatabaseSyncError }) {
 
   async function resetPassword(userId, newPassword) {
     if (!newPassword || newPassword.length < 6) {
-      alert("Password must be at least 6 characters."); return
+      showToast("Password must be at least 6 characters.", "error"); return
     }
     if (!confirm("Are you sure you want to reset this user's password? This action cannot be undone.")) return;
 
@@ -1075,9 +1074,9 @@ function RoleManager({ profile, setDatabaseSyncError }) {
     })
 
     if (error) {
-      alert("Security Reset Failed: " + error.message)
+      showToast("Security Reset Failed: " + error.message, "error")
     } else {
-      alert("Password Reset Successful! User can now login with the new credentials.")
+      showToast("Password Reset Successful!", "success")
     }
     setUpdating(null)
   }
@@ -1090,7 +1089,7 @@ function RoleManager({ profile, setDatabaseSyncError }) {
       .eq('id', userId)
 
     if (error) {
-      alert("Failed to update roles: " + error.message)
+      showToast("Failed to update roles: " + error.message, "error")
     } else {
       setUsers(prev => prev.map(u => u.id === userId ? { ...u, roles: newRoles, role: newRoles[0] || 'student' } : u))
     }
@@ -1107,10 +1106,10 @@ function RoleManager({ profile, setDatabaseSyncError }) {
     })
 
     if (error) {
-      alert("Institutional Sync Failed: " + error.message)
+      showToast("Institutional Sync Failed: " + error.message, "error")
     } else {
       setUsers(prev => prev.map(u => u.id === userId ? { ...u, email: newEmail.trim().toLowerCase() } : u))
-      alert("Institutional Email Synced! User can now login with the new email.")
+      showToast("Institutional Email Synced!", "success")
     }
     setUpdating(null)
   }
@@ -1272,7 +1271,7 @@ function RoleManager({ profile, setDatabaseSyncError }) {
   )
 }
 /* ── Curriculum Manager ───────────────────────────── */
-function CurriculumManager({ profile, setDatabaseSyncError }) {
+function CurriculumManager({ profile, setDatabaseSyncError, showToast }) {
   const [subjects, setSubjects] = useState([])
   const [topics, setTopics] = useState([])
   const [selectedSub, setSelectedSub] = useState('')
@@ -1319,7 +1318,7 @@ function CurriculumManager({ profile, setDatabaseSyncError }) {
       description: newTopic.description,
       order_index: topics.length
     })
-    if (error) alert(error.message)
+    if (error) showToast(error.message, "error")
     else {
       setNewTopic({ title: '', description: '' })
       fetchTopics(selectedSub)
@@ -1381,10 +1380,10 @@ function CurriculumManager({ profile, setDatabaseSyncError }) {
           }
         }
 
-        alert("Batch Curriculum Processed Successfully!")
+        showToast("Batch Curriculum Processed Successfully!", "success")
         await fetchData()
       } catch (err) {
-        alert("Import Error: " + err.message)
+        showToast("Import Error: " + err.message, "error")
       } finally {
         setImporting(false)
       }
@@ -1505,10 +1504,14 @@ function CurriculumManager({ profile, setDatabaseSyncError }) {
 }
 
 /* ── Promotion Manager (HOD SPECIAL) ───────────── */
-function PromotionManager({ profile, setDatabaseSyncError }) {
+function PromotionManager({ profile, setDatabaseSyncError, showToast }) {
   const [stats, setStats] = useState([])
   const [loading, setLoading] = useState(true)
-  const [promoting, setPromoting] = useState(null) // branch-section tag
+  const [promoting, setPromoting] = useState(null) 
+  const [viewingSection, setViewingSection] = useState(null) // { branch, sem, sec }
+  const [sectionStudents, setSectionStudents] = useState([])
+  const [excludedIds, setExcludedIds] = useState(new Set())
+  const [loadingSection, setLoadingSection] = useState(false)
 
   const BRANCHES = ['CME', 'ECE', 'EEE', 'ME', 'CIVIL', 'AI', 'IT', 'CSE']
   const targetBranch = (profile?.roles || [profile?.role]).includes('hod') ? profile?.branch : 'ALL'
@@ -1549,30 +1552,59 @@ function PromotionManager({ profile, setDatabaseSyncError }) {
   async function promote(branch, currentSem, section) {
     const semNum = parseInt(currentSem.split(' ')[1])
     if (semNum >= 8) {
-      alert("Institutional Cap: Students are already at the final semester (Sem 8).")
+      if(showToast) showToast("Institutional Cap: Final Semester reached.", "error")
+      else alert("Institutional Cap: Final Semester reached.")
       return
     }
     const nextSem = `Sem ${semNum + 1}`
-    
-    if (!confirm(`Are you sure you want to PROMOTE all students in ${branch} ${currentSem} Section ${section} to ${nextSem}?`)) return
+    const includedIds = sectionStudents.filter(s => !excludedIds.has(s.id)).map(s => s.id)
+
+    if (includedIds.length === 0) {
+      showToast("Select at least one student to promote.", "error")
+      return
+    }
+
+    if (!confirm(`Promote ${includedIds.length} students to ${nextSem}?`)) return
 
     setPromoting(`${branch}-${section}`)
     try {
       const { error } = await supabase.from('profiles')
         .update({ semester: nextSem })
-        .eq('branch', branch)
-        .eq('semester', currentSem)
-        .eq('section', section)
-        .eq('role', 'student')
+        .in('id', includedIds)
       
       if (error) throw error
-      alert(`Success! ${branch} ${section} promoted to ${nextSem}.`)
+      showToast(`${includedIds.length} students promoted to ${nextSem}!`, "success")
+      setViewingSection(null)
       await fetchStats()
     } catch (err) {
-      alert("Promotion Failed: " + err.message)
+      showToast("Promotion Failed: " + err.message, "error")
     } finally {
       setPromoting(null)
     }
+  }
+
+  async function fetchStudentsForSection(branch, sem, sec) {
+    setLoadingSection(true)
+    setViewingSection({ branch, sem, sec })
+    setExcludedIds(new Set())
+    const { data, error } = await supabase.from('profiles')
+      .select('id, full_name, pin_number')
+      .eq('branch', branch)
+      .eq('semester', sem)
+      .eq('section', sec)
+      .eq('role', 'student')
+      .order('pin_number')
+    
+    if (error) showToast(error.message, "error")
+    else setSectionStudents(data || [])
+    setLoadingSection(false)
+  }
+
+  const toggleStudent = (id) => {
+    const next = new Set(excludedIds)
+    if (next.has(id)) next.delete(id)
+    else next.add(id)
+    setExcludedIds(next)
   }
 
   return (
@@ -1612,14 +1644,14 @@ function PromotionManager({ profile, setDatabaseSyncError }) {
                   <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">Section {s.sec}</p>
                </div>
                <button 
-                 disabled={promoting === `${s.branch}-${s.sec}`}
-                 onClick={() => promote(s.branch, s.sem, s.sec)}
-                 className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-[#272A6F] hover:shadow-xl hover:-translate-y-1 transition-all active:scale-[0.98] disabled:opacity-50">
-                 {promoting === `${s.branch}-${s.sec}` ? 'Promoting...' : 'Promote to Next Sem'}
-               </button>
-               {/* Aesthetic Accent */}
-               <div className="absolute -bottom-4 -right-4 w-20 h-20 bg-indigo-500/5 rounded-full blur-2xl group-hover:bg-indigo-500/10 transition-colors" />
-            </div>
+                  onClick={() => fetchStudentsForSection(s.branch, s.sem, s.sec)}
+                  className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-[#272A6F] hover:shadow-xl hover:-translate-y-1 transition-all active:scale-[0.98] flex items-center justify-center space-x-2">
+                  <span>Manage Promotion</span>
+                  <ChevronRight size={14} />
+                </button>
+                {/* Aesthetic Accent */}
+                <div className="absolute -bottom-4 -right-4 w-20 h-20 bg-indigo-500/5 rounded-full blur-2xl group-hover:bg-indigo-500/10 transition-colors" />
+             </div>
           ))}
         </div>
       )}
@@ -1631,6 +1663,61 @@ function PromotionManager({ profile, setDatabaseSyncError }) {
             Promotion is a permanent administrative action. Ensure that all final examinations for the current semester are completed and graded before transitioning the section.
          </div>
       </div>
+
+      {viewingSection && (
+        <div className="fixed inset-0 bg-[#272A6F]/20 backdrop-blur-sm z-[150] flex items-center justify-center p-4 animate-in fade-in duration-300 text-left">
+           <div className="bg-white w-full max-w-2xl rounded-[3rem] shadow-2xl overflow-hidden animate-in slide-in-from-bottom-10 duration-500 flex flex-col max-h-[85vh]">
+              <div className="p-8 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
+                 <div>
+                    <h4 className="text-xl font-black text-[#272A6F] uppercase tracking-tight">{viewingSection.branch} • {viewingSection.sem}</h4>
+                    <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">Section {viewingSection.sec} • {sectionStudents.length} Students</p>
+                 </div>
+                 <button onClick={() => setViewingSection(null)} className="p-3 bg-white border border-gray-100 rounded-2xl text-gray-400 hover:text-red-500 transition-colors shadow-sm">
+                    <Trash2 size={20} />
+                 </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-8 space-y-3 custom-scrollbar">
+                 {loadingSection ? (
+                   <div className="flex justify-center py-20"><Loader2 className="animate-spin text-[#272A6F]" /></div>
+                 ) : (
+                   sectionStudents.map(s => (
+                     <div key={s.id} onClick={() => toggleStudent(s.id)}
+                       className={`p-4 rounded-2xl border-2 flex items-center justify-between cursor-pointer transition-all active:scale-[0.99]
+                       ${excludedIds.has(s.id) ? 'bg-red-50 border-red-100' : 'bg-white border-gray-50 hover:border-indigo-100'}`}>
+                        <div className="flex items-center space-x-4">
+                           <div className={`w-10 h-10 rounded-xl flex items-center justify-center shadow-inner
+                             ${excludedIds.has(s.id) ? 'bg-white text-red-400' : 'bg-indigo-50 text-indigo-600'}`}>
+                              <User size={18} />
+                           </div>
+                           <div>
+                              <p className={`text-sm font-black transition-colors ${excludedIds.has(s.id) ? 'text-red-900 line-through' : 'text-[#272A6F]'}`}>{s.full_name}</p>
+                              <p className="text-[10px] font-mono text-gray-400">{s.pin_number}</p>
+                           </div>
+                        </div>
+                        <div className={`w-6 h-6 rounded-lg flex items-center justify-center transition-all
+                          ${excludedIds.has(s.id) ? 'bg-red-500 text-white shadow-lg' : 'bg-green-500 text-white shadow-lg'}`}>
+                           {excludedIds.has(s.id) ? <XCircle size={14} /> : <CheckCircle2 size={14} />}
+                        </div>
+                     </div>
+                   ))
+                 )}
+              </div>
+
+              <div className="p-8 bg-gray-50 border-t border-gray-100 flex items-center justify-between">
+                 <div className="text-xs font-bold text-gray-400 uppercase tracking-widest">
+                    Promoting <span className="text-indigo-600 font-black">{sectionStudents.length - excludedIds.size}</span> students
+                 </div>
+                 <button 
+                   disabled={promoting || (sectionStudents.length - excludedIds.size === 0)}
+                   onClick={() => promote(viewingSection.branch, viewingSection.sem, viewingSection.sec)}
+                   className="px-8 py-4 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-[#272A6F] hover:shadow-xl hover:-translate-y-1 transition-all active:scale-95 disabled:opacity-50">
+                    {promoting ? 'Processing...' : 'Confirm Promotion'}
+                 </button>
+              </div>
+           </div>
+        </div>
+      )}
     </div>
   )
 }

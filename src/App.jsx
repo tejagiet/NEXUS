@@ -20,7 +20,7 @@ import NoticeBoard from './components/NoticeBoard'
 import CommunityHub from './components/CommunityHub'
 // Student logic migrated to standalone portal
 import {
-  LayoutDashboard, LogOut, User, ClipboardList, Wallet, Camera,
+  LayoutDashboard, LogOut, User, ClipboardList, Wallet, Camera, CheckCircle2, Info, XCircle,
   GraduationCap, BookOpen, ShieldCheck, Settings, Menu, X, MessageSquare, Calendar, Layers, Megaphone, Users
 } from 'lucide-react'
 
@@ -67,7 +67,7 @@ MENU.vice_principal = MENU.admin
 MENU.hod = MENU.admin
 MENU.class_teacher = MENU.faculty
 
-function RoleView({ tab, profile, prefill, onPrefillClear, setTab }) {
+function RoleView({ tab, profile, prefill, onPrefillClear, setTab, showToast }) {
   const userRoles = profile?.roles || [profile?.role] || []
   const isFaculty = userRoles.some(r => r === 'faculty' || r === 'class_teacher')
   const isAdmin = userRoles.some(r => ['admin', 'principal', 'vice_principal', 'hod'].includes(r))
@@ -96,20 +96,20 @@ function RoleView({ tab, profile, prefill, onPrefillClear, setTab }) {
           <p className="mt-8 text-[10px] font-black text-gray-300 uppercase tracking-[0.2em]">Institutional Intelligence v2.0</p>
         </div>
       )
-    case 'sbtet':        return <SBTETResults profile={profile} />
-    case 'fees':         return <FinanceBridge profile={profile} />
-    case 'register':     return <FacultyRegister profile={profile} prefill={prefill} onPrefillClear={onPrefillClear} />
-    case 'classresults': return <ClassResults profile={profile} />
-    case 'batchfees':    return <BatchFees profile={profile} />
-    case 'lms':          return <LMSPortal profile={profile} />
-    case 'cctv':         return <CCTVMonitor profile={profile} />
-    case 'mfa':          return <MFASetup profile={profile} />
-    case 'mgmt':         return <ManagementSuite profile={profile} prefill={prefill} onPrefillClear={onPrefillClear} />
-    case 'profile':      return <ManagementSuite profile={profile} prefill={{ tab: 'profiles' }} onPrefillClear={onPrefillClear} isStandalone={true} />
-    case 'timetable':    return <SmartTimetable profile={profile} onMarkAttendance={(subId) => onPrefillClear(subId)} />
-    case 'calendar':     return <AcademicCalendar profile={profile} />
-    case 'notices':      return <NoticeBoard profile={profile} />
-    case 'social':       return <CommunityHub profile={profile} />
+    case 'sbtet':        return <SBTETResults profile={profile} showToast={showToast} />
+    case 'fees':         return <FinanceBridge profile={profile} showToast={showToast} />
+    case 'register':     return <FacultyRegister profile={profile} prefill={prefill} onPrefillClear={onPrefillClear} showToast={showToast} />
+    case 'classresults': return <ClassResults profile={profile} showToast={showToast} />
+    case 'batchfees':    return <BatchFees profile={profile} showToast={showToast} />
+    case 'lms':          return <LMSPortal profile={profile} showToast={showToast} />
+    case 'cctv':         return <CCTVMonitor profile={profile} showToast={showToast} />
+    case 'mfa':          return <MFASetup profile={profile} showToast={showToast} />
+    case 'mgmt':         return <ManagementSuite profile={profile} prefill={prefill} onPrefillClear={onPrefillClear} showToast={showToast} />
+    case 'profile':      return <ManagementSuite profile={profile} prefill={{ tab: 'profiles' }} onPrefillClear={onPrefillClear} isStandalone={true} showToast={showToast} />
+    case 'timetable':    return <SmartTimetable profile={profile} onMarkAttendance={(subId) => onPrefillClear(subId)} showToast={showToast} />
+    case 'calendar':     return <AcademicCalendar profile={profile} showToast={showToast} />
+    case 'notices':      return <NoticeBoard profile={profile} showToast={showToast} />
+    case 'social':       return <CommunityHub profile={profile} showToast={showToast} />
     default:             return null
   }
 }
@@ -121,6 +121,12 @@ export default function App() {
   const [activeTab, setActiveTab] = useState(localStorage.getItem('nexus_active_tab'))
   const [needsMFA, setNeedsMFA] = useState(false)
   const [prefill, setPrefill] = useState(null) // { subjectId }
+  const [notification, setNotification] = useState({ message: '', type: 'info', visible: false })
+
+  const showToast = (message, type = 'info') => {
+    setNotification({ message, type, visible: true })
+    setTimeout(() => setNotification(prev => ({ ...prev, visible: false })), 4000)
+  }
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => setSession(session))
@@ -261,6 +267,7 @@ export default function App() {
                 }
               }}
               setTab={setActiveTab}
+              showToast={showToast}
             />
           )}
           {!profile && (
@@ -273,6 +280,26 @@ export default function App() {
           )}
         </div>
       </main>
+
+      {/* 🛰️ Global Institutional Notification Service */}
+      {notification.visible && (
+        <div className="fixed bottom-10 right-10 z-[300] max-w-sm animate-in slide-in-from-right-10 fade-in duration-500">
+           <div className={`p-5 rounded-[2rem] shadow-2xl flex items-center space-x-4 border backdrop-blur-md
+             ${notification.type === 'success' ? 'bg-green-500/95 border-green-400 text-white' : 
+               notification.type === 'error' ? 'bg-red-500/95 border-red-400 text-white' : 
+               'bg-[#272A6F]/95 border-indigo-400 text-white'}`}>
+             <div className="w-10 h-10 rounded-2xl bg-white/20 flex items-center justify-center flex-shrink-0 shadow-inner">
+                {notification.type === 'success' ? <CheckCircle2 size={20} /> : 
+                 notification.type === 'error' ? <XCircle size={20} /> : 
+                 <Info size={20} />}
+             </div>
+             <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.2em] opacity-60 mb-0.5">{notification.type}</p>
+                <p className="text-sm font-bold leading-tight">{notification.message}</p>
+             </div>
+           </div>
+        </div>
+      )}
     </div>
   )
 }

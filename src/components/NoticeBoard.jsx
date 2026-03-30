@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { Bell, Plus, Trash2, Mail, Users, Filter, Loader2, Megaphone, FileText, Send, X } from 'lucide-react'
 
-export default function NoticeBoard({ profile }) {
+export default function NoticeBoard({ profile, showToast }) {
   const [notices, setNotices] = useState([])
   const [loading, setLoading] = useState(true)
   const [showAdd, setShowAdd] = useState(false)
@@ -32,8 +32,12 @@ export default function NoticeBoard({ profile }) {
       ...newNotice,
       author_id: profile.id
     })
-    if (error) alert(error.message)
+    if (error) {
+      if (showToast) showToast(error.message, "error")
+      else alert(error.message)
+    }
     else {
+      if (showToast) showToast("Notice Broadcast Successfully!", "success")
       setShowAdd(false); setNewNotice({ title: '', content: '', target_role: 'ALL', target_branch: 'ALL', category: 'General' }); fetchNotices()
     }
     setSaving(false)
