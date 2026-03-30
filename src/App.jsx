@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { supabase } from './lib/supabase'
 import Auth from './components/Auth'
-import StudentDashboard from './components/StudentDashboard'
 import StaffDashboard from './components/StaffDashboard'
 import FacultyDashboard from './components/FacultyDashboard'
 import FacultyRegister from './components/FacultyRegister'
