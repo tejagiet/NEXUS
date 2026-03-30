@@ -189,9 +189,32 @@ export default function ClassResults({ profile }) {
       ]
     })
     const masterBlob = makeCSVBlob([masterHeader, ...masterRows])
-    const masterPath = `${folder}/CLASS_RESULTS_Sem${semester}_Master.csv`
-    const { error: masterErr } = await supabase.storage.from('results').upload(masterPath, masterBlob, { upsert: true, contentType: 'text/csv' })
-    log.push(masterErr ? `❌ Master: ${masterErr.message}` : `✅ Master file saved`)
+    const masterPath = `CLASS_RESULTS_Sem${semester}_Master.csv`
+    
+    try {
+      const reader = new FileReader()
+      const masterBase64 = await new Promise((resolve) => {
+        reader.onloadend = () => resolve(reader.result.split(',')[1])
+        reader.readAsDataURL(masterBlob)
+      })
+
+      const res = await fetch('/api/upload-file', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: masterPath,
+          type: 'CSV',
+          branch: profile?.branch || 'ALL',
+          uploaded_by: profile.id,
+          base64Data: masterBase64,
+          category: 'results'
+        })
+      })
+      const data = await res.json()
+      log.push(data.error ? `❌ Master: ${data.error}` : `✅ Master file saved to TiDB`)
+    } catch (err) {
+      log.push(`❌ Master: ${err.message}`)
+    }
 
     // ── 2. Per-subject files ───────────────────────────────────────────
     for (const code of allSubjectCodes) {
@@ -203,9 +226,32 @@ export default function ClassResults({ profile }) {
           return [r.pin, r.name, s.external, s.internal, s.total, s.grade, s.result]
         })
       const subBlob = makeCSVBlob([subHeader, ...subRows])
-      const subPath = `${folder}/Subject_${code}_Sem${semester}.csv`
-      const { error: subErr } = await supabase.storage.from('results').upload(subPath, subBlob, { upsert: true, contentType: 'text/csv' })
-      log.push(subErr ? `❌ ${code}: ${subErr.message}` : `✅ Subject ${code} saved`)
+      const subPath = `Subject_${code}_Sem${semester}.csv`
+      
+      try {
+        const reader = new FileReader()
+        const subBase64 = await new Promise((resolve) => {
+          reader.onloadend = () => resolve(reader.result.split(',')[1])
+          reader.readAsDataURL(subBlob)
+        })
+
+        const res = await fetch('/api/upload-file', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: subPath,
+            type: 'CSV',
+            branch: profile?.branch || 'ALL',
+            uploaded_by: profile.id,
+            base64Data: subBase64,
+            category: 'results'
+          })
+        })
+        const data = await res.json()
+        log.push(data.error ? `❌ ${code}: ${data.error}` : `✅ Subject ${code} saved to TiDB`)
+      } catch (err) {
+        log.push(`❌ ${code}: ${err.message}`)
+      }
     }
 
     setUploadLog(log)
@@ -414,7 +460,7 @@ export default function ClassResults({ profile }) {
             </div>
             <div>
               <p className="font-black text-[#272A6F]">Storage Upload Report</p>
-              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Supabase Storage → results bucket</p>
+              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">TiDB Cloud → institutional_files table</p>
             </div>
           </div>
           <div className="space-y-1.5 max-h-52 overflow-y-auto pr-1">

@@ -35,24 +35,33 @@ export default function LMSPortal({ profile }) {
 
   async function fetchFiles() {
     setLoading(true)
-    let query = supabase.from('lms_files').select('*').order('created_at', { ascending: false })
-    if (filter !== 'ALL') query = query.eq('branch', filter)
-    const { data, error } = await query
-    if (!error) setFiles(data || [])
-    else setFiles([])
+    try {
+      const res = await fetch(`/api/files?branch=${filter}&category=LMS`)
+      const data = await res.json()
+      if (!data.error) setFiles(data || [])
+      else setFiles([])
+    } catch (err) {
+      console.error("TiDB File Fetch Error:", err)
+      setFiles([])
+    }
     setLoading(false)
   }
 
   async function fetchResultFiles() {
     setResultsLoading(true)
-    const { data, error } = await supabase.storage.from('results').list(semFilter, { limit: 100, sortBy: { column: 'name', order: 'asc' } })
-    setResultFiles(error ? [] : (data || []))
+    try {
+      const res = await fetch(`/api/files?branch=${filter}&category=results`)
+      const data = await res.json()
+      setResultFiles(data.error ? [] : (data || []))
+    } catch (err) {
+      console.error("TiDB Result Fetch Error:", err)
+      setResultFiles([])
+    }
     setResultsLoading(false)
   }
 
-  function getResultFileURL(fileName) {
-    const { data } = supabase.storage.from('results').getPublicUrl(`${semFilter}/${fileName}`)
-    return data.publicUrl
+  function getResultFileURL(fileId) {
+    return `/api/file?id=${fileId}`
   }
 
   async function fetchAssignments() {
@@ -94,31 +103,51 @@ export default function LMSPortal({ profile }) {
     if (!uploadMeta.title.trim()) { setError('Please enter a title for the file first.'); return }
     setUploading(true); setError(null)
     try {
-      const ext = file.name.split('.').pop()
-      const path = `${uploadMeta.branch}/${Date.now()}_${file.name}`
-      const { error: uploadErr } = await supabase.storage.from('lms-files').upload(path, file)
-      if (uploadErr) throw uploadErr
-      const { data: { publicUrl } } = supabase.storage.from('lms-files').getPublicUrl(path)
-      await supabase.from('lms_files').insert({
-        title: uploadMeta.title, branch: uploadMeta.branch,
-        file_type: uploadMeta.type, file_url: publicUrl,
-        file_name: file.name, uploaded_by: profile.id
-      })
-      setUploadMeta(m => ({ ...m, title: '' }))
-      await fetchFiles()
+      const reader = new FileReader()
+      reader.onloadend = async () => {
+        const base64Data = reader.result.split(',')[1]
+        
+        const payload = {
+          name: file.name,
+          type: uploadMeta.type,
+          branch: uploadMeta.branch,
+          uploaded_by: profile.id,
+          base64Data: base64Data,
+          category: tab === 'results' ? 'results' : 'LMS'
+        }
+
+        const res = await fetch('/api/upload-file', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        })
+
+        const result = await res.json()
+        if (result.error) throw new Error(result.error)
+
+        setUploadMeta(m => ({ ...m, title: '' }))
+        if (tab === 'results') await fetchResultFiles()
+        else await fetchFiles()
+        setUploading(false)
+      }
+      reader.readAsDataURL(file)
     } catch (err) {
       setError(err.message)
-    } finally {
       setUploading(false)
     }
   }
 
-  async function deleteFile(fileId, fileUrl) {
+  async function deleteFile(fileId) {
     if (!confirm('Delete this resource?')) return
-    const path = fileUrl.split('/lms-files/')[1]
-    await supabase.storage.from('lms-files').remove([path])
-    await supabase.from('lms_files').delete().eq('id', fileId)
-    fetchFiles()
+    try {
+      const res = await fetch(`/api/delete-file?id=${fileId}`, { method: 'DELETE' })
+      const data = await res.json()
+      if (data.error) throw new Error(data.error)
+      if (tab === 'results') await fetchResultFiles()
+      else await fetchFiles()
+    } catch (err) {
+      setError(err.message)
+    }
   }
 
   const isFaculty = userRoles.some(r => ['admin', 'principal', 'hod', 'faculty', 'class_teacher', 'vice_principal'].includes(r))
@@ -179,7 +208,7 @@ export default function LMSPortal({ profile }) {
               <button onClick={() => fileRef.current?.click()} disabled={uploading}
                 className="w-full flex items-center justify-center space-x-3 py-10 rounded-2xl bg-[#272A6F]/5 hover:bg-[#272A6F]/10 transition-colors">
                 {uploading ? <Loader2 className="animate-spin text-[#272A6F]" size={24} /> : <Upload size={24} className="text-[#272A6F]" />}
-                <span className="font-bold text-[#272A6F]">{uploading ? 'Uploading to Supabase Storage...' : 'Click or drag a file to upload (PDF, PPT, Video)'}</span>
+                <span className="font-bold text-[#272A6F]">{uploading ? 'Uploading to TiDB Cloud (BLOB)...' : 'Click or drag a file to upload (PDF, PPT, Video)'}</span>
               </button>
             </div>
           )}
@@ -220,13 +249,13 @@ export default function LMSPortal({ profile }) {
                       <p className="text-xs text-gray-300">{new Date(file.created_at).toLocaleDateString('en-IN')}</p>
                     </div>
                     <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-100">
-                      <a href={file.file_url} target="_blank" rel="noopener noreferrer"
+                      <a href={`/api/file?id=${file.id}`} target="_blank" rel="noopener noreferrer"
                         className="flex items-center space-x-1.5 text-[#272A6F] text-xs font-bold hover:text-[#EFBE33] transition-colors">
                         <Download size={14} />
                         <span>Download</span>
                       </a>
                       {isFaculty && (
-                        <button onClick={() => deleteFile(file.id, file.file_url)}
+                        <button onClick={() => deleteFile(file.id)}
                           className="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-600 transition-all">
                           <Trash2 size={14} />
                         </button>

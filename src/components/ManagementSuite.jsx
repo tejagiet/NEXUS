@@ -158,44 +158,27 @@ function ProfileEditor({ profile, isStandalone = false }) {
 
     setUploading(true)
     try {
-      const fileExt = file.name.split('.').pop()
-      const fileName = `${selected.id}/${Math.random()}.${fileExt}`
-      const { error: uploadError } = await supabase.storage
-        .from('avatars')
-        .upload(fileName, file, { upsert: true })
-
-      if (uploadError) {
-        if (uploadError.statusCode === "400") throw new Error("Storage Bucket 'avatars' may be missing. Please run storage_repair.sql.")
-        if (uploadError.message?.includes("row-level security")) throw new Error("Security Violation: You don't have permission to update this avatar. Ensure storage_repair.sql was run.")
-        throw uploadError
+      const reader = new FileReader()
+      reader.onloadend = async () => {
+        const base64Data = reader.result.split(',')[1]
+        const res = await fetch('/api/upload-profile', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: selected.id, avatar_base64: base64Data })
+        })
+        const data = await res.json()
+        if (data.error) throw new Error(data.error)
+        
+        // Update local state with new URL derived from TiDB API
+        const newUrl = `/api/image?id=${selected.id}&t=${Date.now()}`
+        setFormData(prev => ({ ...prev, avatar_url: newUrl }))
+        
+        showToast("Profile Picture Updated in TiDB!", "success")
       }
-
-      const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(fileName)
-    
-      // 🏦 TiDB Cloud Mirroring
-      try {
-        const reader = new FileReader()
-        reader.onloadend = async () => {
-          const base64Data = reader.result.split(',')[1]
-          await fetch('/api/upload-profile', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ id: selected.id, avatar_base64: base64Data })
-          })
-        }
-        reader.readAsDataURL(file)
-      } catch (tidbErr) {
-        console.error("TiDB Mirroring Failed:", tidbErr)
-      }
-
-      // Auto-save the URL to profile
-      const { error: profileError } = await supabase.from('profiles').update({ avatar_url: publicUrl }).eq('id', selected.id)
-      if (profileError) throw profileError
-      setFormData(prev => ({ ...prev, avatar_url: publicUrl }))
-
+      reader.readAsDataURL(file)
     } catch (err) {
-      console.error("Institutional Asset Error:", err)
-      showToast("Institutional Upload Failed: " + err.message, "error")
+      console.error("TiDB Storage Failed:", err)
+      showToast("Biometric Storage Failed: " + err.message, "error")
     } finally {
       setUploading(false)
     }
