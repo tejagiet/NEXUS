@@ -24,6 +24,34 @@ export default function FacultyDashboard({ profile, setTab }) {
   })
   const [loading, setLoading] = useState(true)
 
+  // Helper to group consecutive lab slots
+  const groupSlots = (slots) => {
+    if (!slots || slots.length === 0) return []
+    const grouped = []
+    let currentGroup = null
+
+    const sorted = [...slots].sort((a, b) => a.slot - b.slot)
+
+    sorted.forEach((slot) => {
+      const isLab = slot.type?.toLowerCase() === 'lab'
+      
+      if (isLab && currentGroup && slot.subjects?.name === currentGroup.subjects?.name && slot.slot === Math.max(...currentGroup.slots) + 1) {
+        currentGroup.slots.push(slot.slot)
+        currentGroup.endTime = SLOT_TIMES[slot.slot].split(' - ')[1]
+      } else {
+        currentGroup = {
+          ...slot,
+          isGroup: isLab,
+          slots: [slot.slot],
+          startTime: SLOT_TIMES[slot.slot].split(' - ')[0],
+          endTime: SLOT_TIMES[slot.slot].split(' - ')[1]
+        }
+        grouped.push(currentGroup)
+      }
+    })
+    return grouped
+  }
+
   useEffect(() => {
     fetchFacultyData()
   }, [])
@@ -44,7 +72,7 @@ export default function FacultyDashboard({ profile, setTab }) {
         .eq('day', today)
         .order('slot', { ascending: true })
       
-      setSchedule(ttData || [])
+      setSchedule(groupSlots(ttData || []))
 
       // 3. Fetch Metrics (Avg Attendance across all my subjects)
       const { data: attendRes } = await supabase.from('attendance')
@@ -116,18 +144,18 @@ export default function FacultyDashboard({ profile, setTab }) {
              </div>
            ) : (
              <div className="space-y-4">
-                {schedule.map(slot => (
-                  <div key={slot.id} className="flex items-center justify-between p-5 bg-gray-50 rounded-3xl group hover:bg-[#272A6F] hover:text-white transition-all cursor-pointer"
+                {schedule.map((slot, idx) => (
+                  <div key={idx} className={`flex items-center justify-between p-5 rounded-3xl group hover:bg-[#272A6F] hover:text-white transition-all cursor-pointer ${slot.isGroup ? 'bg-indigo-50 border border-indigo-100' : 'bg-gray-50'}`}
                     onClick={() => setTab && setTab('register')}>
                      <div className="flex items-center space-x-4">
-                        <div className="w-12 h-12 bg-white rounded-2xl flex flex-col items-center justify-center shadow-sm group-hover:bg-white/10">
-                           <span className="text-[10px] font-black group-hover:text-white/70">SLOT</span>
-                           <span className="text-lg font-black text-[#272A6F] group-hover:text-white leading-none">{slot.slot}</span>
+                        <div className={`w-12 h-12 bg-white rounded-2xl flex flex-col items-center justify-center shadow-sm group-hover:bg-white/10 ${slot.isGroup ? 'bg-[#272A6F] text-white' : ''}`}>
+                           <span className={`text-[10px] font-black uppercase ${slot.isGroup ? 'text-white/60' : 'group-hover:text-white/70'}`}>{slot.isGroup ? 'LAB' : 'SLOT'}</span>
+                           <span className={`text-lg font-black leading-none ${slot.isGroup ? 'text-white' : 'text-[#272A6F] group-hover:text-white'}`}>{slot.isGroup ? slot.slots.length : slot.slot}</span>
                         </div>
                         <div>
                            <h4 className="font-bold text-sm leading-tight">{slot.subjects?.name}</h4>
                            <p className="text-[10px] font-bold opacity-60 uppercase tracking-widest mt-1">
-                             {slot.branch}-{slot.section} · {SLOT_TIMES[slot.slot]}
+                             {slot.branch}-{slot.section} · {slot.startTime} - {slot.endTime}
                            </p>
                         </div>
                      </div>

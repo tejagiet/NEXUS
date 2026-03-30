@@ -49,11 +49,15 @@ export default function CommunityHub({ profile }) {
   }
 
   async function createRoom(roomData) {
+    console.log("Creating Room with Data:", roomData)
     const { error } = await supabase.from('chat_rooms').insert({
       ...roomData,
       created_by: profile.id
     })
-    if (error) alert(error.message)
+    if (error) {
+      console.error("Chat Room Creation Failed:", error)
+      alert(`Institutional Error: ${error.message}`)
+    }
     else fetchRooms()
   }
 
@@ -119,7 +123,15 @@ export default function CommunityHub({ profile }) {
                     sec = prompt("Section (A/B/C):", "A") || "A";
                   }
 
-                  if (roomName) createRoom({ name: roomName, subject_id: subId, section: sec, branch: profile.branch || 'ALL' })
+                  if (roomName) {
+                    const roomData = { 
+                      name: roomName, 
+                      subject_id: subId, 
+                      section: sec, 
+                      branch: profile.branch || 'ALL' 
+                    }
+                    createRoom(roomData)
+                  }
                 }} className="text-[#272A6F] hover:text-[#EFBE33] transition-colors"><Plus size={14} /></button>
               )}
             </div>

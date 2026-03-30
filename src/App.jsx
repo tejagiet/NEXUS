@@ -19,6 +19,7 @@ import BatchFees from './components/BatchFees'
 import AcademicCalendar from './components/AcademicCalendar'
 import NoticeBoard from './components/NoticeBoard'
 import CommunityHub from './components/CommunityHub'
+// Student logic migrated to standalone portal
 import {
   LayoutDashboard, LogOut, User, ClipboardList, Wallet, Camera,
   GraduationCap, BookOpen, ShieldCheck, Settings, Menu, X, MessageSquare, Calendar, Layers, Megaphone, Users
@@ -26,16 +27,8 @@ import {
 
 const MENU = {
   student: [
-    { id: 'dashboard', label: 'My Dashboard',  icon: LayoutDashboard },
-    { id: 'timetable', label: 'Timetable',     icon: Calendar },
-    { id: 'calendar',  label: 'Academic Cal',  icon: ClipboardList },
-    { id: 'notices',   label: 'Circulars',     icon: Megaphone },
-    { id: 'social',    label: 'Community Hub', icon: Users },
-    { id: 'sbtet',     label: 'SBTET Results', icon: GraduationCap },
-    { id: 'fees',      label: 'Finance',        icon: Wallet },
-    { id: 'lms',       label: 'Resources',      icon: BookOpen },
-    { id: 'mgmt',      label: 'Feedback',        icon: MessageSquare },
-    { id: 'profile',   label: 'My Profile',      icon: User },
+    { id: 'dashboard', label: 'Student Portal', icon: GraduationCap },
+    { id: 'profile',   label: 'My Profile',     icon: User },
   ],
   faculty: [
     { id: 'dashboard',  label: 'My Nexus',       icon: LayoutDashboard },
@@ -84,7 +77,26 @@ function RoleView({ tab, profile, prefill, onPrefillClear, setTab }) {
     case 'dashboard':    
       if (isAdmin) return <StaffDashboard profile={profile} />
       if (isFaculty) return <FacultyDashboard profile={profile} setTab={setTab} />
-      return <StudentDashboard profile={profile} setTab={setTab} />
+      return (
+        <div className="bg-white rounded-[2.5rem] p-12 shadow-2xl border-2 border-dashed border-[#272A6F]/10 text-center max-w-2xl mx-auto mt-10 animate-in fade-in zoom-in duration-500">
+          <div className="w-24 h-24 bg-primary/5 rounded-full flex items-center justify-center mx-auto mb-8 shadow-inner">
+            <GraduationCap size={48} className="text-primary" />
+          </div>
+          <h2 className="text-3xl font-black text-primary uppercase tracking-tight mb-4">Nexus Student Portal</h2>
+          <p className="text-gray-500 font-medium leading-relaxed mb-10 text-lg px-8">
+            The student experience has moved to a dedicated, high-performance portal. 
+            Enjoy a mobile-first UI with real-time academic tracking.
+          </p>
+          <a 
+            href="http://localhost:5174" 
+            className="inline-flex items-center gap-4 bg-primary text-white px-10 py-5 rounded-2xl font-black text-sm uppercase tracking-widest shadow-2xl hover:scale-105 active:scale-95 transition-all"
+          >
+            <span>Launch Student App</span>
+            <span className="material-symbols-outlined">rocket_launch</span>
+          </a>
+          <p className="mt-8 text-[10px] font-black text-gray-300 uppercase tracking-[0.2em]">Institutional Intelligence v2.0</p>
+        </div>
+      )
     case 'sbtet':        return <SBTETResults profile={profile} />
     case 'fees':         return <FinanceBridge profile={profile} />
     case 'register':     return <FacultyRegister profile={profile} prefill={prefill} onPrefillClear={onPrefillClear} />
@@ -161,6 +173,9 @@ export default function App() {
   // Sort by original priority if needed, but here we just keep the order of roles
   const menu = aggregatedMenu.length > 0 ? aggregatedMenu : (MENU.student) // Fallback
 
+  // Students are handled within the main layout with a portal link
+
+
   return (
     <div className="min-h-screen bg-gray-50 flex">
       {/* Mobile toggle */}
@@ -178,8 +193,9 @@ export default function App() {
         ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0`}>
 
         {/* Brand */}
-        <div className="p-8 border-b border-white/10 text-center">
-          <h1 className="text-2xl font-black tracking-tighter">NEXUS <span className="text-[#EFBE33]">GIET</span></h1>
+        <div className="p-8 border-b border-white/10 text-center flex flex-col items-center">
+          <img src="/logo.png" alt="Nexus GIET Logo" className="w-16 h-16 object-contain mb-4 rounded-2xl shadow-2xl bg-white p-1" />
+          <h1 className="text-2xl font-black tracking-tighter uppercase">NEXUS <span className="text-[#EFBE33]">GIET</span></h1>
           <p className="text-[10px] font-black text-white/30 uppercase tracking-[0.3em] mt-1">Institutional Intelligence</p>
         </div>
 

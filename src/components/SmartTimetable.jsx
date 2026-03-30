@@ -34,6 +34,34 @@ export default function SmartTimetable({ profile, onMarkAttendance }) {
   const [viewMode, setViewMode] = useState(isStaff ? 'personal' : 'class')
   const [activeSlot, setActiveSlot] = useState(null) // { day, slot }
 
+  // Helper to group consecutive lab slots
+  const groupSlots = (slots) => {
+    if (!slots || slots.length === 0) return []
+    const grouped = []
+    let currentGroup = null
+
+    const sorted = [...slots].sort((a, b) => a.slot - b.slot)
+
+    sorted.forEach((slot) => {
+      const isLab = slot.type?.toLowerCase() === 'lab'
+      
+      if (isLab && currentGroup && slot.subjects?.name === currentGroup.subjects?.name && slot.slot === Math.max(...currentGroup.slots) + 1) {
+        currentGroup.slots.push(slot.slot)
+        currentGroup.endTime = SLOT_TIMES[slot.slot].split(' - ')[1]
+      } else {
+        currentGroup = {
+          ...slot,
+          isGroup: isLab,
+          slots: [slot.slot],
+          startTime: (SLOT_TIMES[slot.slot] || '').split(' - ')[0],
+          endTime: (SLOT_TIMES[slot.slot] || '').split(' - ')[1]
+        }
+        grouped.push(currentGroup)
+      }
+    })
+    return grouped
+  }
+
   useEffect(() => {
     fetchData()
 
@@ -82,9 +110,6 @@ export default function SmartTimetable({ profile, onMarkAttendance }) {
     if (!activeSlot) return
     setSaving(true)
     const { day, slot } = activeSlot
-    
-    // Check conflicts (is faculty already teaching elsewhere at this time?)
-    // In a full implementation we'd check across all timetables for this sub's faculty_id
     
     const { error } = await supabase.from('timetable_slots').upsert({
       branch, semester, section, day, slot, subject_id: subjectId
@@ -151,7 +176,7 @@ export default function SmartTimetable({ profile, onMarkAttendance }) {
         </div>
       </header>
 
-      {/* 🚀 Today's Schedule Card (Student View focus) */}
+      {/* 🚀 Today's Schedule Card (Student View focus) - Now with Grouping */}
       {(!loading && timetable.length > 0) && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="col-span-full mb-2">
@@ -162,27 +187,29 @@ export default function SmartTimetable({ profile, onMarkAttendance }) {
           </div>
           {(() => {
             const today = new Date().toLocaleDateString('en-US', { weekday: 'long' })
-            const todaysSlots = timetable.filter(t => t.day === today).sort((a,b) => a.slot - b.slot)
+            const todaysSlots = timetable.filter(t => t.day === today)
+            const groupedToday = groupSlots(todaysSlots)
             
-            if (todaysSlots.length === 0) return (
+            if (groupedToday.length === 0) return (
               <div className="col-span-full p-6 bg-white border border-dashed border-gray-200 rounded-3xl text-center">
                 <p className="text-gray-400 text-sm font-bold">No classes scheduled for today.</p>
               </div>
             )
 
-            return todaysSlots.map(t => (
-              <div key={t.id} className="p-4 bg-white border-2 border-gray-100 rounded-[2rem] shadow-sm hover:shadow-md transition-all border-l-4 border-l-blue-500">
+            return groupedToday.map((t, idx) => (
+              <div key={idx} className={`p-4 bg-white border-2 rounded-[2rem] shadow-sm hover:shadow-md transition-all border-l-4 ${t.isGroup ? 'border-indigo-500 bg-indigo-50/10 border-indigo-100' : 'border-gray-100 border-l-blue-500'}`}>
                 <div className="flex justify-between items-start mb-2">
-                  <span className="text-[9px] font-black bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full">Slot {t.slot}</span>
-                  <span className="text-[9px] font-mono font-bold text-gray-400">{SLOT_TIMES[t.slot]}</span>
+                  <span className={`text-[9px] font-black px-2 py-0.5 rounded-full ${t.isGroup ? 'bg-indigo-100 text-indigo-700' : 'bg-blue-50 text-blue-600'}`}>{t.isGroup ? 'LAB' : `Slot ${t.slot}`}</span>
+                  <span className="text-[9px] font-mono font-bold text-gray-400">{t.startTime} - {t.endTime}</span>
                 </div>
-                <h4 className="font-bold text-[#272A6F] text-sm leading-tight">{t.subjects?.name}</h4>
+                <h4 className="font-bold text-[#272A6F] text-sm leading-tight line-clamp-1">{t.subjects?.name}</h4>
                 <p className="text-[9px] text-[#272A6F]/60 font-black mt-1 uppercase tracking-tighter">
                   {t.subjects?.code} {viewMode === 'personal' && `· ${t.branch}-${t.section}`}
+                  {t.isGroup && <span className="ml-1 text-indigo-400 italic">({t.slots.length} Periods)</span>}
                 </p>
                 {isStaff && (
                   <button onClick={() => onMarkAttendance({ subjectId: t.subject_id, branch: t.branch, section: t.section })}
-                    className="mt-3 w-full py-1.5 bg-[#272A6F] text-white rounded-xl text-[10px] font-black hover:bg-blue-600 transition-all">
+                    className={`mt-3 w-full py-1.5 rounded-xl text-[10px] font-black transition-all ${t.isGroup ? 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-indigo-100' : 'bg-[#272A6F] text-white hover:bg-blue-600'}`}>
                     Mark Attendance
                   </button>
                 )}
@@ -199,7 +226,7 @@ export default function SmartTimetable({ profile, onMarkAttendance }) {
         </div>
       )}
 
-      {/* Timetable Grid */}
+      {/* Timetable Grid - We keep slots individual here for precise editing, but could highlight lab slots */}
       <div className="overflow-x-auto rounded-3xl border border-gray-100 shadow-sm bg-white">
         <table className="w-full border-collapse">
           <thead>
@@ -220,15 +247,19 @@ export default function SmartTimetable({ profile, onMarkAttendance }) {
                 {SLOTS.map(slot => {
                   const entry = getSlotSubject(day, slot)
                   const isActive = activeSlot?.day === day && activeSlot?.slot === slot
+                  const isLab = entry?.type?.toLowerCase() === 'lab'
 
                   return (
                     <td key={slot} className={`p-2 border-b border-r border-gray-50 min-w-[120px] transition-all
                       ${isActive ? 'bg-[#272A6F]/5 ring-2 ring-inset ring-[#272A6F]' : ''}`}>
                       
                       {entry ? (
-                        <div className="relative group/slot p-3 rounded-xl bg-blue-50 border border-blue-100 h-full flex flex-col justify-between">
+                        <div className={`relative group/slot p-3 rounded-xl border h-full flex flex-col justify-between transition-all ${isLab ? 'bg-indigo-50 border-indigo-100 shadow-sm' : 'bg-blue-50 border-blue-100'}`}>
                           <div>
-                            <p className="text-[10px] font-black text-blue-800 leading-tight">{entry.subjects?.name}</p>
+                            <p className="text-[10px] font-black text-blue-800 leading-tight flex justify-between">
+                              <span>{entry.subjects?.name}</span>
+                              {isLab && <span className="text-[8px] opacity-40">LAB</span>}
+                            </p>
                             <p className="text-[9px] font-mono font-bold text-blue-400 mt-1 uppercase">
                               {entry.subjects?.code} {viewMode === 'personal' && `· ${entry.branch}-${entry.section}`}
                             </p>
@@ -237,7 +268,7 @@ export default function SmartTimetable({ profile, onMarkAttendance }) {
                             <div className="flex justify-between items-end mt-2">
                               <button 
                                 onClick={() => onMarkAttendance({ subjectId: entry.subject_id, branch: entry.branch, section: entry.section })}
-                                className="text-[9px] px-2 py-1 bg-[#272A6F] text-white rounded-lg font-bold hover:bg-[#343a8a] transition-all shadow-sm"
+                                className={`text-[9px] px-2 py-1 rounded-lg font-bold transition-all shadow-sm ${isLab ? 'bg-indigo-600 text-white hover:bg-indigo-700' : 'bg-[#272A6F] text-white hover:bg-blue-600'}`}
                               >
                                 Mark
                               </button>
@@ -275,7 +306,6 @@ export default function SmartTimetable({ profile, onMarkAttendance }) {
         </table>
       </div>
 
-      {/* Assignment Modal / Drawer */}
       {activeSlot && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#272A6F]/20 backdrop-blur-sm">
           <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in duration-200">
@@ -327,7 +357,7 @@ export default function SmartTimetable({ profile, onMarkAttendance }) {
             <h4 className="font-black text-[#272A6F]">Smart Scheduling Tips</h4>
             <ul className="mt-2 space-y-1 text-xs text-gray-600 font-medium list-disc list-inside">
               <li>Place heavy core subjects (e.g. CM-401) in morning slots (1-3) for better retention.</li>
-              <li>Schedule Labs or Activity periods in afternoon slots (5-8).</li>
+              <li>Schedule Labs or Activity periods in afternoon slots (5-7).</li>
               <li>Ensure each subject has at least 4-5 hours per week for full coverage.</li>
               <li>Nexus automatically detects faculty double-bookings across branches.</li>
             </ul>

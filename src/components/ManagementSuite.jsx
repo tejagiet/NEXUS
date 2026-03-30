@@ -11,6 +11,7 @@ const TABS = [
   { id: 'subjects', label: 'Subject Manager', icon: BookMarked, roles: ['admin', 'hod', 'principal', 'vice_principal'] },
   { id: 'roles', label: 'Role Manager', icon: ShieldCheck, roles: ['admin'] },
   { id: 'curriculum', label: 'Curriculum', icon: Layers, roles: ['admin', 'hod', 'principal', 'vice_principal'] },
+  { id: 'promotion', label: 'Promotion', icon: TrendingUp, roles: ['admin', 'hod', 'principal', 'vice_principal'] },
   { id: 'profiles', label: 'Profiles', icon: User, roles: ['admin', 'hod', 'principal', 'faculty', 'class_teacher', 'vice_principal', 'student'], studentOnly: true },
   { id: 'feedback', label: 'Feedback', icon: MessageSquare, roles: ['admin', 'hod', 'principal', 'faculty', 'class_teacher', 'vice_principal', 'student'] },
 ]
@@ -93,6 +94,7 @@ export default function ManagementSuite({ profile, prefill, onPrefillClear, isSt
             case 'subjects': return <SubjectManager profile={profile} setDatabaseSyncError={setDatabaseSyncError} />
             case 'roles': return <RoleManager profile={profile} setDatabaseSyncError={setDatabaseSyncError} />
             case 'curriculum': return <CurriculumManager profile={profile} setDatabaseSyncError={setDatabaseSyncError} />
+            case 'promotion': return <PromotionManager profile={profile} setDatabaseSyncError={setDatabaseSyncError} />
             case 'profiles': return <ProfileEditor profile={profile} setDatabaseSyncError={setDatabaseSyncError} isStandalone={isStandalone} />
             case 'feedback': return isStudent ? <StudentFeedback profile={profile} /> : <FeedbackInbox profile={profile} />
             default: return null
@@ -625,12 +627,25 @@ function AdminUserCreator({ profile, setDatabaseSyncError }) {
     }
     setSaving(true); setMsg(null)
     try {
+      // 🕵️ Institutional Session Preservation
+      const { data: { session: adminSession } } = await supabase.auth.getSession();
+
       const cleanPin = form.pin_number.trim().toLowerCase()
       const finalEmail = form.email.trim().toLowerCase() || `${cleanPin || Date.now()}@nexusgiet.edu.in`
+      
       const { data: authData, error: authErr } = await supabase.auth.signUp({
         email: finalEmail, password: form.password,
         options: { data: { full_name: form.full_name, roles: form.roles, pin_number: form.pin_number, branch: form.branch } }
       })
+
+      // 🛡️ Immediate Administrative Restore to prevent auto-login to the new student account
+      if (adminSession) {
+        await supabase.auth.setSession({
+          access_token: adminSession.access_token,
+          refresh_token: adminSession.refresh_token
+        });
+      }
+
       if (authErr) throw authErr
       const userId = authData.user?.id
       if (userId) {
@@ -998,11 +1013,24 @@ function SubjectManager({ profile, setDatabaseSyncError }) {
                   <h4 className="font-bold text-[#272A6F] text-sm leading-tight mb-1">{s.name}</h4>
                   <p className="text-xs font-mono font-bold text-gray-400">{s.code}</p>
                 </div>
-                <div className="mt-4 pt-4 border-t border-gray-50 flex items-center space-x-2">
-                  <User2 size={12} className="text-gray-300" />
-                  <p className="text-[11px] font-bold text-gray-500 truncate">
-                    {s.profiles?.full_name || 'No Faculty Assigned'}
-                  </p>
+                <div className="mt-4 pt-4 border-t border-gray-50">
+                  <div className="flex items-center space-x-2 mb-2">
+                    <User2 size={12} className="text-gray-300" />
+                    <p className="text-[11px] font-black uppercase text-gray-400 tracking-wider">Faculty Assignment</p>
+                  </div>
+                  <select 
+                    value={s.faculty_id || ''} 
+                    onChange={async (e) => {
+                      const newFac = e.target.value || null
+                      const { error } = await supabase.from('subjects').update({ faculty_id: newFac }).eq('id', s.id)
+                      if (error) alert(error.message)
+                      else fetchData()
+                    }}
+                    className="w-full bg-gray-50 border border-gray-100 rounded-lg px-2 py-1.5 text-[11px] font-bold text-[#272A6F] focus:border-[#272A6F] outline-none"
+                  >
+                    <option value="">-- No Faculty --</option>
+                    {faculty.map(f => <option key={f.id} value={f.id}>{f.full_name}</option>)}
+                  </select>
                 </div>
               </div>
             ))}
@@ -1251,6 +1279,7 @@ function CurriculumManager({ profile, setDatabaseSyncError }) {
   const [newTopic, setNewTopic] = useState({ title: '', description: '' })
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [importing, setImporting] = useState(false)
 
   useEffect(() => {
     fetchData()
@@ -1296,6 +1325,71 @@ function CurriculumManager({ profile, setDatabaseSyncError }) {
     setSaving(false)
   }
 
+  const downloadTemplate = () => {
+    const csv = "Subject Code,Subject Name,Topic Title,Topic Description,Order\nCM-401,Data Structures,Introduction to Linked Lists,Basics of Nodes and Pointers,1\nCM-401,Data Structures,Stack Implementation,LIFO principles,2"
+    const blob = new Blob([csv], { type: 'text/csv' })
+    const url = window.URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'nexus_curriculum_template.csv'
+    a.click()
+  }
+
+  async function handleCsvUpload(e) {
+    const file = e.target.files[0]
+    if (!file) return
+    setImporting(true)
+
+    const reader = new FileReader()
+    reader.onload = async (event) => {
+      try {
+        const text = event.target.result
+        const rows = text.split('\n').filter(r => r.trim()).slice(1)
+        
+        // Subject Code, Subject Name, Topic Title, Topic Description, Order
+        const data = rows.map(r => r.split(',').map(s => s.trim()))
+        
+        const branch = profile.branch || 'CME'
+        
+        // Group by subject
+        const subjectsMap = {}
+        data.forEach(([code, name, title, desc, order]) => {
+          if (!code || !name) return
+          if (!subjectsMap[code]) subjectsMap[code] = { name, topics: [] }
+          if (title) subjectsMap[code].topics.push({ title, description: desc, order_index: parseInt(order) || 0 })
+        })
+
+        for (const code in subjectsMap) {
+          // 1. Upsert Subject
+          const { data: subData, error: subErr } = await supabase.from('subjects').upsert({
+            code: code.toUpperCase(),
+            name: subjectsMap[code].name,
+            branch: branch
+          }, { onConflict: 'code' }).select().single()
+
+          if (subErr) throw subErr
+
+          // 2. Clear & Replace Topics
+          await supabase.from('curriculum').delete().eq('subject_id', subData.id)
+          
+          if (subjectsMap[code].topics.length > 0) {
+            const topicsToInsert = subjectsMap[code].topics.map(t => ({ ...t, subject_id: subData.id }))
+            const { error: topicErr } = await supabase.from('curriculum').insert(topicsToInsert)
+            if (topicErr) throw topicErr
+          }
+        }
+
+        alert("Batch Curriculum Processed Successfully!")
+        await fetchData()
+      } catch (err) {
+        alert("Import Error: " + err.message)
+      } finally {
+        setImporting(false)
+      }
+    }
+    reader.readAsText(file)
+  }
+
   async function toggleComplete(id, current) {
     await supabase.from('curriculum').update({ is_completed: !current }).eq('id', id)
     setTopics(t => t.map(x => x.id === id ? { ...x, is_completed: !current } : x))
@@ -1305,20 +1399,33 @@ function CurriculumManager({ profile, setDatabaseSyncError }) {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center space-x-3">
-        <div className="w-10 h-10 bg-[#272A6F] rounded-xl flex items-center justify-center text-white shadow-lg">
-          <Layers size={20} />
+      <div className="flex items-center justify-between">
+        <div className="flex items-center space-x-3">
+          <div className="w-10 h-10 bg-[#272A6F] rounded-xl flex items-center justify-center text-white shadow-lg">
+            <Layers size={20} />
+          </div>
+          <div>
+            <h3 className="text-lg font-black text-[#272A6F]">Curriculum Manager</h3>
+            <p className="text-xs text-gray-400 font-bold uppercase tracking-widest">Define subject syllabi and track completion</p>
+          </div>
         </div>
-        <div>
-          <h3 className="text-lg font-black text-[#272A6F]">Curriculum Manager</h3>
-          <p className="text-xs text-gray-400 font-bold uppercase tracking-widest">Define subject syllabi and track completion</p>
+        <div className="flex items-center space-x-3">
+           <button onClick={downloadTemplate} className="flex items-center space-x-2 px-4 py-2 bg-white text-indigo-600 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-50 transition-all border border-indigo-100">
+             <Download size={14} />
+             <span>Template</span>
+           </button>
+           <label className="flex items-center space-x-2 px-4 py-2 bg-indigo-50 text-indigo-700 rounded-xl text-[10px] font-black uppercase tracking-widest cursor-pointer hover:bg-indigo-100 transition-all border border-indigo-100">
+             <CloudUpload size={14} />
+             <span>{importing ? 'Processing...' : 'Upload CSV'}</span>
+             <input type="file" accept=".csv" onChange={handleCsvUpload} className="hidden" disabled={importing} />
+           </label>
         </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="md:col-span-1 space-y-4">
           <label className="block text-[10px] font-black uppercase tracking-widest text-gray-400">Select Subject</label>
-          <div className="space-y-2 max-h-[400px] overflow-y-auto pr-2">
+          <div className="space-y-2 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
             {subjects.map(s => (
               <button key={s.id} onClick={() => setSelectedSub(s.id)}
                 className={`w-full text-left p-4 rounded-2xl border transition-all ${selectedSub === s.id ? 'bg-[#272A6F] text-white border-[#272A6F] shadow-lg scale-[1.02]' : 'bg-gray-50 text-gray-600 border-gray-100 hover:bg-gray-100'}`}>
@@ -1360,13 +1467,13 @@ function CurriculumManager({ profile, setDatabaseSyncError }) {
                     <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-black text-xs ${t.is_completed ? 'bg-green-500 text-white' : 'bg-gray-100 text-gray-400'}`}>
                       {idx + 1}
                     </div>
-                    <div>
+                    <div className="flex-1">
                       <h5 className={`font-bold text-sm ${t.is_completed ? 'text-green-700' : 'text-[#272A6F]'}`}>{t.title}</h5>
-                      <p className="text-xs text-gray-400">{t.description}</p>
+                      <p className="text-xs text-gray-400 line-clamp-1">{t.description}</p>
                     </div>
                   </div>
                   <button onClick={() => toggleComplete(t.id, t.is_completed)}
-                    className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${t.is_completed ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-400'}`}>
+                    className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-sm ${t.is_completed ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-400 hover:bg-gray-200'}`}>
                     {t.is_completed ? 'Done ✓' : 'Mark Done'}
                   </button>
                 </div>
@@ -1374,6 +1481,137 @@ function CurriculumManager({ profile, setDatabaseSyncError }) {
             )}
           </div>
         </div>
+      </div>
+    </div>
+  )
+}
+
+/* ── Promotion Manager (HOD SPECIAL) ───────────── */
+function PromotionManager({ profile, setDatabaseSyncError }) {
+  const [stats, setStats] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [promoting, setPromoting] = useState(null) // branch-section tag
+
+  const BRANCHES = ['CME', 'ECE', 'EEE', 'ME', 'CIVIL', 'AI', 'IT', 'CSE']
+  const targetBranch = (profile?.roles || [profile?.role]).includes('hod') ? profile?.branch : 'ALL'
+
+  useEffect(() => {
+    fetchStats()
+  }, [])
+
+  async function fetchStats() {
+    setLoading(true)
+    try {
+      let query = supabase.from('profiles').select('branch, semester, section').eq('role', 'student')
+      if (targetBranch !== 'ALL') query = query.eq('branch', targetBranch)
+      
+      const { data, error } = await query
+      if (error) throw error
+
+      // Group: CME-Sem 4-A: 60 students
+      const grouped = data.reduce((acc, s) => {
+        const key = `${s.branch}|${s.semester || 'Sem 1'}|${s.section || 'A'}`
+        acc[key] = (acc[key] || 0) + 1
+        return acc
+      }, {})
+
+      const finalStats = Object.entries(grouped).map(([key, count]) => {
+        const [branch, sem, sec] = key.split('|')
+        return { branch, sem, sec, count }
+      }).sort((a,b) => a.branch.localeCompare(b.branch) || a.sem.localeCompare(b.sem))
+
+      setStats(finalStats)
+    } catch (err) {
+      setDatabaseSyncError(err.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function promote(branch, currentSem, section) {
+    const semNum = parseInt(currentSem.split(' ')[1])
+    if (semNum >= 8) {
+      alert("Institutional Cap: Students are already at the final semester (Sem 8).")
+      return
+    }
+    const nextSem = `Sem ${semNum + 1}`
+    
+    if (!confirm(`Are you sure you want to PROMOTE all students in ${branch} ${currentSem} Section ${section} to ${nextSem}?`)) return
+
+    setPromoting(`${branch}-${section}`)
+    try {
+      const { error } = await supabase.from('profiles')
+        .update({ semester: nextSem })
+        .eq('branch', branch)
+        .eq('semester', currentSem)
+        .eq('section', section)
+        .eq('role', 'student')
+      
+      if (error) throw error
+      alert(`Success! ${branch} ${section} promoted to ${nextSem}.`)
+      await fetchStats()
+    } catch (err) {
+      alert("Promotion Failed: " + err.message)
+    } finally {
+      setPromoting(null)
+    }
+  }
+
+  return (
+    <div className="space-y-8">
+      <div className="flex items-center space-x-3">
+        <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white shadow-lg">
+          <TrendingUp size={20} />
+        </div>
+        <div>
+          <h3 className="text-lg font-black text-[#272A6F]">Promotion Manager</h3>
+          <p className="text-xs text-gray-400 font-bold uppercase tracking-widest">HOD Special: Transition sections to the next semester</p>
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="flex justify-center py-20"><Loader2 className="animate-spin text-[#272A6F]" size={40} /></div>
+      ) : stats.length === 0 ? (
+        <div className="text-center py-32 bg-gray-50 rounded-[3rem] border-2 border-dashed border-gray-100">
+           <Users size={40} className="mx-auto mb-4 opacity-10" />
+           <p className="text-gray-400 font-bold uppercase tracking-widest text-xs">No students found in {targetBranch}</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {stats.map((s, idx) => (
+            <div key={idx} className="glass rounded-[2rem] p-6 border-2 border-gray-100 hover:border-indigo-200 transition-all group relative overflow-hidden">
+               <div className="flex justify-between items-start mb-6">
+                  <div className="w-12 h-12 bg-indigo-50 rounded-2xl flex items-center justify-center text-indigo-600 group-hover:scale-110 transition-transform">
+                     <span className="font-black text-xs uppercase tracking-tighter">{s.branch}</span>
+                  </div>
+                  <div className="text-right">
+                     <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-1">Strength</p>
+                     <p className="text-xl font-black text-[#272A6F]">{s.count}</p>
+                  </div>
+               </div>
+               <div className="mb-8">
+                  <h4 className="text-2xl font-black text-[#272A6F]">{s.sem}</h4>
+                  <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">Section {s.sec}</p>
+               </div>
+               <button 
+                 disabled={promoting === `${s.branch}-${s.sec}`}
+                 onClick={() => promote(s.branch, s.sem, s.sec)}
+                 className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-[#272A6F] hover:shadow-xl hover:-translate-y-1 transition-all active:scale-[0.98] disabled:opacity-50">
+                 {promoting === `${s.branch}-${s.sec}` ? 'Promoting...' : 'Promote to Next Sem'}
+               </button>
+               {/* Aesthetic Accent */}
+               <div className="absolute -bottom-4 -right-4 w-20 h-20 bg-indigo-500/5 rounded-full blur-2xl group-hover:bg-indigo-500/10 transition-colors" />
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="p-6 bg-amber-50 rounded-3xl border border-amber-100 flex items-start space-x-4">
+         <Info size={20} className="text-amber-600 flex-shrink-0 mt-0.5" />
+         <div className="text-xs text-amber-800 font-medium leading-relaxed">
+            <p className="font-black uppercase tracking-widest mb-1">HOD Advisory</p>
+            Promotion is a permanent administrative action. Ensure that all final examinations for the current semester are completed and graded before transitioning the section.
+         </div>
       </div>
     </div>
   )

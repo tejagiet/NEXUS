@@ -236,50 +236,66 @@ export default function FacultyRegister({ profile, prefill, onPrefillClear }) {
 
         {/* Student table */}
         <div className="overflow-x-auto">
-                {(() => {
-                  const filtered = students.filter(s => s.branch === selectedBranch && s.section === selectedSection)
-                  if (filtered.length === 0) return (
-                    <tr>
-                      <td colSpan="4" className="p-12 text-center text-gray-400 italic">
-                        No students found in {selectedBranch} Section {selectedSection}.
+          <table className="w-full text-left border-collapse">
+            <thead className="bg-[#272A6F]/5 border-b border-[#272A6F]/10">
+              <tr>
+                <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-[#272A6F]">PIN / Hall Ticket</th>
+                <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-[#272A6F]">Student Name</th>
+                <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-[#272A6F]">Branch-Sec</th>
+                <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-[#272A6F] text-center">Attendance Status</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {(() => {
+                const filtered = students.filter(s => s.branch === selectedBranch && s.section === selectedSection)
+                if (filtered.length === 0) return (
+                  <tr>
+                    <td colSpan="4" className="p-12 text-center text-gray-400 italic">
+                      No students found in {selectedBranch} Section {selectedSection}.
+                    </td>
+                  </tr>
+                )
+                return filtered.map(student => {
+                  const status = attendanceData[student.id]
+                  return (
+                    <tr key={student.id} className={`transition-colors border-l-4 ${
+                      status === 'present' ? 'bg-green-50/50 border-green-500' :
+                      status === 'absent'  ? 'bg-red-50/50 border-red-500'   : 'hover:bg-white/40 border-transparent'}`}>
+                      <td className="px-6 py-4">
+                        <span className="font-black text-[#272A6F] font-mono text-xs px-2.5 py-1 bg-[#272A6F]/5 rounded-lg border border-[#272A6F]/10 shadow-sm leading-none inline-block">
+                          {student.pin_number || '—'}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4">
+                        <p className="font-black text-[#272A6F] text-sm group-hover:translate-x-1 transition-transform">{student.full_name}</p>
+                      </td>
+                      <td className="px-6 py-4">
+                         <span className="text-[10px] font-bold text-gray-400 bg-gray-50 border border-gray-100 px-2 py-0.5 rounded-md">{student.branch}-{student.section}</span>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex justify-center space-x-3">
+                          <button onClick={() => toggleAttendance(student.id, 'present')}
+                            className={`p-2.5 rounded-2xl transition-all duration-300 ${
+                              status === 'present'
+                                ? 'bg-green-500 text-white shadow-xl shadow-green-200 scale-110'
+                                : 'bg-gray-50 text-gray-400 hover:bg-green-100 hover:text-green-600 border border-gray-100'}`}>
+                            <CheckCircle2 size={18} />
+                          </button>
+                          <button onClick={() => toggleAttendance(student.id, 'absent')}
+                            className={`p-2.5 rounded-2xl transition-all duration-300 ${
+                              status === 'absent'
+                                ? 'bg-red-500 text-white shadow-xl shadow-red-200 scale-110'
+                                : 'bg-gray-50 text-gray-400 hover:bg-red-100 hover:text-red-600 border border-gray-100'}`}>
+                            <XCircle size={18} />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   )
-                  return filtered.map(student => {
-                    const status = attendanceData[student.id]
-                    return (
-                      <tr key={student.id} className={`transition-colors border-l-4 ${
-                        status === 'present' ? 'bg-green-50 border-green-500' :
-                        status === 'absent'  ? 'bg-red-50 border-red-500'   : 'hover:bg-white/40 border-transparent'}`}>
-                        <td className="px-6 py-3">
-                          <span className="font-black text-[#272A6F] font-mono text-sm px-2 py-1 bg-gray-100 rounded">
-                            {student.pin_number || '—'}
-                          </span>
-                        </td>
-                        <td className="px-6 py-3 font-bold text-gray-800">{student.full_name}</td>
-                        <td className="px-6 py-3 text-sm text-gray-500">{student.branch}-{student.section}</td>
-                        <td className="px-6 py-3">
-                          <div className="flex justify-center space-x-3">
-                            <button onClick={() => toggleAttendance(student.id, 'present')}
-                              className={`p-2 rounded-full transition-all ${
-                                status === 'present'
-                                  ? 'bg-green-500 text-white shadow-lg scale-110'
-                                  : 'bg-gray-100 text-gray-400 hover:bg-green-100 hover:text-green-600'}`}>
-                              <CheckCircle2 size={20} />
-                            </button>
-                            <button onClick={() => toggleAttendance(student.id, 'absent')}
-                              className={`p-2 rounded-full transition-all ${
-                                status === 'absent'
-                                  ? 'bg-red-500 text-white shadow-lg scale-110'
-                                  : 'bg-gray-100 text-gray-400 hover:bg-red-100 hover:text-red-600'}`}>
-                              <XCircle size={20} />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    )
-                  })
-                })()}
+                })
+              })()}
+            </tbody>
+          </table>
         </div>
       </div>
 
