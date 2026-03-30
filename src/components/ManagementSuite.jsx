@@ -12,9 +12,8 @@ const TABS = [
   { id: 'roles', label: 'Role Manager', icon: ShieldCheck, roles: ['admin'] },
   { id: 'curriculum', label: 'Curriculum', icon: Layers, roles: ['admin', 'hod', 'principal', 'vice_principal'] },
   { id: 'promotion', label: 'Promotion', icon: TrendingUp, roles: ['admin', 'hod', 'principal', 'vice_principal'] },
-  { id: 'profiles', label: 'Profiles', icon: User, roles: ['admin', 'hod', 'principal', 'faculty', 'class_teacher', 'vice_principal', 'student'], studentOnly: true },
-  { id: 'feedback', label: 'Feedback', icon: MessageSquare, roles: ['admin', 'hod', 'principal', 'faculty', 'class_teacher', 'vice_principal', 'student'] },
-  { id: 'migration', label: 'Systems Sync', icon: CloudUpload, roles: ['admin'] },
+  { id: 'profiles', label: 'Profiles', icon: User, roles: ROLES },
+  { id: 'feedback', label: 'Feedback', icon: MessageSquare, roles: ROLES },
 ]
 
 export default function ManagementSuite({ profile, prefill, onPrefillClear, showToast, isStandalone = false }) {
@@ -98,7 +97,6 @@ export default function ManagementSuite({ profile, prefill, onPrefillClear, show
             case 'promotion': return <PromotionManager profile={profile} setDatabaseSyncError={setDatabaseSyncError} showToast={showToast} />
             case 'profiles': return <ProfileEditor profile={profile} setDatabaseSyncError={setDatabaseSyncError} isStandalone={isStandalone} showToast={showToast} />
             case 'feedback': return isStudent ? <StudentFeedback profile={profile} /> : <FeedbackInbox profile={profile} />
-            case 'migration': return <MigrationManager profile={profile} showToast={showToast} />
             default: return null
           }
         })()}
@@ -160,27 +158,28 @@ function ProfileEditor({ profile, isStandalone = false }) {
 
     setUploading(true)
     try {
-      const reader = new FileReader()
-      reader.onloadend = async () => {
-        const base64Data = reader.result.split(',')[1]
-        const res = await fetch('/api/upload-profile', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ id: selected.id, avatar_base64: base64Data })
-        })
-        const data = await res.json()
-        if (data.error) throw new Error(data.error)
-        
-        // Update local state with new URL derived from TiDB API
-        const newUrl = `/api/image?id=${selected.id}&t=${Date.now()}`
-        setFormData(prev => ({ ...prev, avatar_url: newUrl }))
-        
-        showToast("Profile Picture Updated in TiDB!", "success")
-      }
-      reader.readAsDataURL(file)
+      const fileExt = file.name.split('.').pop()
+      const filePath = `avatars/${selected.id}_${Math.random()}.${fileExt}`
+
+      // 1. Upload to Supabase Storage
+      const { data: storageData, error: storageError } = await supabase.storage
+        .from('avatars')
+        .upload(filePath, file, { upsert: true })
+
+      if (storageError) throw storageError
+
+      // 2. Get Public URL
+      const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(filePath)
+      
+      // 3. Update Profile record
+      const { error: dbError } = await supabase.from('profiles').update({ avatar_url: publicUrl }).eq('id', selected.id)
+      if (dbError) throw dbError
+
+      setFormData(prev => ({ ...prev, avatar_url: publicUrl }))
+      showToast("Profile Picture Updated in Supabase!", "success")
     } catch (err) {
-      console.error("TiDB Storage Failed:", err)
-      showToast("Biometric Storage Failed: " + err.message, "error")
+      console.error("Supabase Storage Failed:", err)
+      showToast("Digital Identity Sync Failed: " + err.message, "error")
     } finally {
       setUploading(false)
     }
@@ -202,17 +201,6 @@ function ProfileEditor({ profile, isStandalone = false }) {
     }
 
     const { error } = await supabase.from('profiles').update(updateData).eq('id', selected.id)
-
-    // 🏎️ TiDB Parallel Sync
-    try {
-       await fetch('/api/profile', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ id: selected.id, ...updateData })
-       })
-    } catch (tidbErr) {
-       console.error("TiDB Metadata Sync Failed:", tidbErr)
-    }
 
     if (error) showToast("Update failed: " + error.message, "error")
     else {
@@ -1730,108 +1718,6 @@ function PromotionManager({ profile, setDatabaseSyncError, showToast }) {
            </div>
         </div>
       )}
-    </div>
-  )
-}
-function MigrationManager({ profile, showToast }) {
-  const [loading, setLoading] = useState(false)
-  const [report, setReport] = useState(null)
-  const [error, setError] = useState(null)
-
-  const handleSync = async () => {
-    if (!window.confirm("🏛️ Nexus Institutional Mirroring:\n\nAre you sure you want to mirror your live data from Supabase to TiDB Cloud?\nThis will overwrite existing records with the same IDs.")) return
-
-    setLoading(true)
-    setError(null)
-    setReport(null)
-
-    try {
-      const res = await fetch('/api/sync-supabase', { method: 'POST' })
-      const data = await res.json()
-      if (data.error) throw new Error(data.error)
-      setReport(data.report)
-      if (showToast) showToast("Database Cloud Mirroring Complete!", "success")
-    } catch (err) {
-      console.error("Migration Error:", err)
-      setError(err.message)
-      if (showToast) showToast(err.message, "error")
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  return (
-    <div className="space-y-8 animate-in fade-in duration-700">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-        <div className="max-w-2xl">
-          <h2 className="text-3xl font-black text-[#272A6F] flex items-center gap-3">
-            System Synchronizer
-            <span className="text-[10px] bg-[#EFBE33] text-white px-2 py-0.5 rounded-full uppercase tracking-tighter">Admin Only</span>
-          </h2>
-          <p className="text-gray-500 mt-2 font-medium">Mirror institutional data from Supabase to TiDB Cloud. This ensures all academic records, notices, and biometric links are correctly migrated to the new SQL architecture.</p>
-        </div>
-        
-        <button
-          onClick={handleSync}
-          disabled={loading}
-          className={`flex items-center gap-2 px-8 py-4 rounded-[2rem] font-black text-white shadow-2xl transition-all ${loading 
-              ? 'bg-gray-400 cursor-not-allowed' 
-              : 'bg-[#272A6F] hover:shadow-[#272A6F]/30 hover:scale-105 active:scale-95'}`}
-        >
-          {loading ? <Loader2 size={24} className="animate-spin" /> : <CloudUpload size={24} />}
-          {loading ? 'Synchronizing Institutional Intelligence...' : 'Run Cloud Data Mirror'}
-        </button>
-      </div>
-
-      {error && (
-        <div className="p-6 bg-red-50 border-2 border-red-100 rounded-3xl flex items-start gap-4 text-red-700 shadow-xl shadow-red-900/5 animate-shake">
-          <AlertCircle size={28} className="flex-shrink-0" />
-          <div>
-            <p className="font-black uppercase tracking-widest text-xs mb-1">Mirroring Failure</p>
-            <p className="font-bold text-sm">{error}</p>
-            <p className="text-xs mt-2 opacity-70">Check your Vercel Environment Variables (SUPABASE_SERVICE_ROLE_KEY) or contact systems support.</p>
-          </div>
-        </div>
-      )}
-
-      {report && (
-        <div className="bg-gray-50/50 rounded-[2.5rem] border border-gray-100 p-8 shadow-inner animate-in slide-in-from-bottom-5">
-          <div className="flex items-center gap-2 mb-6">
-            <BadgeCheck size={24} className="text-green-500" />
-            <h3 className="font-black text-xl text-[#272A6F]">Sync Report (Complete)</h3>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {Object.entries(report).map(([table, status]) => (
-              <div key={table} className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm flex flex-col gap-2">
-                <span className="text-[10px] font-black text-[#272A6F]/40 uppercase tracking-widest">{table}</span>
-                <span className="font-bold text-sm text-gray-700 leading-tight">{status}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4">
-        <div className="p-8 bg-blue-50/50 border border-blue-100 rounded-[2.5rem] flex flex-col gap-4">
-          <div className="bg-blue-100 p-3 rounded-2xl w-fit">
-            <Info size={24} className="text-blue-600" />
-          </div>
-          <h4 className="font-black text-[#272A6F]">Why Synchronize?</h4>
-          <p className="text-sm text-blue-700/70 font-medium leading-relaxed">
-            As we move away from Supabase buckets and tables, this tool ensures your previous academic data (attendance logs, notice board history) is moved safely to TiDB Cloud. This operation can be run multiple times as it uses "Upsert" logic.
-          </p>
-        </div>
-        
-        <div className="p-8 bg-amber-50/50 border border-amber-100 rounded-[2.5rem] flex flex-col gap-4 text-amber-700">
-          <div className="bg-amber-100 p-3 rounded-2xl w-fit">
-            <ShieldCheck size={24} className="text-amber-600" />
-          </div>
-          <h4 className="font-black">Security Protocol</h4>
-          <p className="text-sm opacity-70 font-medium leading-relaxed">
-            Synchronization is performed cloud-to-cloud via your Vercel Proxy. Database credentials are NEVER exposed to the frontend. All operations are performed using a secure service-role bridge.
-          </p>
-        </div>
-      </div>
     </div>
   )
 }

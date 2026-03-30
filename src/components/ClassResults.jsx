@@ -173,7 +173,6 @@ export default function ClassResults({ profile }) {
     setUploading(true)
     setUploadLog([])
     const log = []
-    const folder = `sem${semester}`
 
     // ── 1. Master file: all students, all subject columns ──────────────
     const allSubjectCodes = [...new Set(results.flatMap(r => r.subjects.map(s => s.code)))]
@@ -189,29 +188,28 @@ export default function ClassResults({ profile }) {
       ]
     })
     const masterBlob = makeCSVBlob([masterHeader, ...masterRows])
-    const masterPath = `CLASS_RESULTS_Sem${semester}_Master.csv`
+    const masterPath = `results/CLASS_RESULTS_Sem${semester}_Master.csv`
+    const masterName = `CLASS_RESULTS_Sem${semester}_Master.csv`
     
     try {
-      const reader = new FileReader()
-      const masterBase64 = await new Promise((resolve) => {
-        reader.onloadend = () => resolve(reader.result.split(',')[1])
-        reader.readAsDataURL(masterBlob)
+      const { error: storageError } = await supabase.storage
+        .from('lms-files')
+        .upload(masterPath, masterBlob, { upsert: true })
+
+      if (storageError) throw storageError
+
+      const { error: dbError } = await supabase.from('lms_files').insert({
+        title: `Master Results - Sem ${semester}`,
+        file_name: masterName,
+        file_path: masterPath,
+        file_type: 'CSV',
+        branch: profile?.branch || 'ALL',
+        category: 'results',
+        uploaded_by: profile.id
       })
 
-      const res = await fetch('/api/upload-file', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: masterPath,
-          type: 'CSV',
-          branch: profile?.branch || 'ALL',
-          uploaded_by: profile.id,
-          base64Data: masterBase64,
-          category: 'results'
-        })
-      })
-      const data = await res.json()
-      log.push(data.error ? `❌ Master: ${data.error}` : `✅ Master file saved to TiDB`)
+      if (dbError) throw dbError
+      log.push(`✅ Master file saved to Supabase`)
     } catch (err) {
       log.push(`❌ Master: ${err.message}`)
     }
@@ -226,29 +224,28 @@ export default function ClassResults({ profile }) {
           return [r.pin, r.name, s.external, s.internal, s.total, s.grade, s.result]
         })
       const subBlob = makeCSVBlob([subHeader, ...subRows])
-      const subPath = `Subject_${code}_Sem${semester}.csv`
+      const subPath = `results/Subject_${code}_Sem${semester}.csv`
+      const subName = `Subject_${code}_Sem${semester}.csv`
       
       try {
-        const reader = new FileReader()
-        const subBase64 = await new Promise((resolve) => {
-          reader.onloadend = () => resolve(reader.result.split(',')[1])
-          reader.readAsDataURL(subBlob)
+        const { error: storageError } = await supabase.storage
+          .from('lms-files')
+          .upload(subPath, subBlob, { upsert: true })
+
+        if (storageError) throw storageError
+
+        const { error: dbError } = await supabase.from('lms_files').insert({
+          title: `Subject ${code} - Sem ${semester}`,
+          file_name: subName,
+          file_path: subPath,
+          file_type: 'CSV',
+          branch: profile?.branch || 'ALL',
+          category: 'results',
+          uploaded_by: profile.id
         })
 
-        const res = await fetch('/api/upload-file', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            name: subPath,
-            type: 'CSV',
-            branch: profile?.branch || 'ALL',
-            uploaded_by: profile.id,
-            base64Data: subBase64,
-            category: 'results'
-          })
-        })
-        const data = await res.json()
-        log.push(data.error ? `❌ ${code}: ${data.error}` : `✅ Subject ${code} saved to TiDB`)
+        if (dbError) throw dbError
+        log.push(`✅ Subject ${code} saved to Supabase`)
       } catch (err) {
         log.push(`❌ ${code}: ${err.message}`)
       }
@@ -460,7 +457,7 @@ export default function ClassResults({ profile }) {
             </div>
             <div>
               <p className="font-black text-[#272A6F]">Storage Upload Report</p>
-              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">TiDB Cloud → institutional_files table</p>
+              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Supabase Storage → lms_files table</p>
             </div>
           </div>
           <div className="space-y-1.5 max-h-52 overflow-y-auto pr-1">

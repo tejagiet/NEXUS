@@ -36,12 +36,19 @@ export default function LMSPortal({ profile }) {
   async function fetchFiles() {
     setLoading(true)
     try {
-      const res = await fetch(`/api/files?branch=${filter}&category=LMS`)
-      const data = await res.json()
-      if (!data.error) setFiles(data || [])
-      else setFiles([])
+      const { data, error } = await supabase
+        .from('lms_files')
+        .select('*')
+        .eq('category', 'LMS')
+        .order('created_at', { ascending: false })
+      
+      if (filter !== 'ALL') {
+        setFiles(data?.filter(f => f.branch === filter || f.branch === 'ALL') || [])
+      } else {
+        setFiles(data || [])
+      }
     } catch (err) {
-      console.error("TiDB File Fetch Error:", err)
+      console.error("Supabase File Fetch Error:", err)
       setFiles([])
     }
     setLoading(false)
@@ -50,18 +57,27 @@ export default function LMSPortal({ profile }) {
   async function fetchResultFiles() {
     setResultsLoading(true)
     try {
-      const res = await fetch(`/api/files?branch=${filter}&category=results`)
-      const data = await res.json()
-      setResultFiles(data.error ? [] : (data || []))
+      const { data, error } = await supabase
+        .from('lms_files')
+        .select('*')
+        .eq('category', 'results')
+        .order('created_at', { ascending: false })
+      
+      if (filter !== 'ALL') {
+        setResultFiles(data?.filter(f => f.branch === filter || f.branch === 'ALL') || [])
+      } else {
+        setResultFiles(data || [])
+      }
     } catch (err) {
-      console.error("TiDB Result Fetch Error:", err)
+      console.error("Supabase Result Fetch Error:", err)
       setResultFiles([])
     }
     setResultsLoading(false)
   }
 
-  function getResultFileURL(fileId) {
-    return `/api/file?id=${fileId}`
+  function getResultFileURL(fileName) {
+    const { data } = supabase.storage.from('lms-files').getPublicUrl(`results/${fileName}`)
+    return data.publicUrl
   }
 
   async function fetchAssignments() {
@@ -103,46 +119,57 @@ export default function LMSPortal({ profile }) {
     if (!uploadMeta.title.trim()) { setError('Please enter a title for the file first.'); return }
     setUploading(true); setError(null)
     try {
-      const reader = new FileReader()
-      reader.onloadend = async () => {
-        const base64Data = reader.result.split(',')[1]
-        
-        const payload = {
-          name: file.name,
-          type: uploadMeta.type,
-          branch: uploadMeta.branch,
-          uploaded_by: profile.id,
-          base64Data: base64Data,
-          category: tab === 'results' ? 'results' : 'LMS'
-        }
+      const category = tab === 'results' ? 'results' : 'LMS'
+      const filePath = `${category}/${Date.now()}_${file.name}`
+      
+      // 1. Upload to Supabase Storage
+      const { data: storageData, error: storageError } = await supabase.storage
+        .from('lms-files')
+        .upload(filePath, file)
 
-        const res = await fetch('/api/upload-file', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        })
+      if (storageError) throw storageError
 
-        const result = await res.json()
-        if (result.error) throw new Error(result.error)
+      // 2. Insert record into database
+      const { error: dbError } = await supabase.from('lms_files').insert({
+        title: uploadMeta.title,
+        file_name: file.name,
+        file_path: filePath,
+        file_type: uploadMeta.type,
+        branch: uploadMeta.branch,
+        category: category,
+        uploaded_by: profile.id
+      })
 
-        setUploadMeta(m => ({ ...m, title: '' }))
-        if (tab === 'results') await fetchResultFiles()
-        else await fetchFiles()
-        setUploading(false)
-      }
-      reader.readAsDataURL(file)
+      if (dbError) throw dbError
+
+      setUploadMeta(m => ({ ...m, title: '' }))
+      if (tab === 'results') await fetchResultFiles()
+      else await fetchFiles()
+      setUploading(false)
     } catch (err) {
       setError(err.message)
       setUploading(false)
     }
   }
 
-  async function deleteFile(fileId) {
+  async function deleteFile(file) {
     if (!confirm('Delete this resource?')) return
     try {
-      const res = await fetch(`/api/delete-file?id=${fileId}`, { method: 'DELETE' })
-      const data = await res.json()
-      if (data.error) throw new Error(data.error)
+      // 1. Delete from storage
+      const { error: storageError } = await supabase.storage
+        .from('lms-files')
+        .remove([file.file_path])
+      
+      if (storageError) console.error("Storage delete error:", storageError)
+
+      // 2. Delete from database
+      const { error: dbError } = await supabase
+        .from('lms_files')
+        .delete()
+        .eq('id', file.id)
+
+      if (dbError) throw dbError
+
       if (tab === 'results') await fetchResultFiles()
       else await fetchFiles()
     } catch (err) {
@@ -208,7 +235,7 @@ export default function LMSPortal({ profile }) {
               <button onClick={() => fileRef.current?.click()} disabled={uploading}
                 className="w-full flex items-center justify-center space-x-3 py-10 rounded-2xl bg-[#272A6F]/5 hover:bg-[#272A6F]/10 transition-colors">
                 {uploading ? <Loader2 className="animate-spin text-[#272A6F]" size={24} /> : <Upload size={24} className="text-[#272A6F]" />}
-                <span className="font-bold text-[#272A6F]">{uploading ? 'Uploading to TiDB Cloud (BLOB)...' : 'Click or drag a file to upload (PDF, PPT, Video)'}</span>
+                <span className="font-bold text-[#272A6F]">{uploading ? 'Uploading to Supabase Storage...' : 'Click or drag a file to upload (PDF, PPT, Video)'}</span>
               </button>
             </div>
           )}
@@ -249,13 +276,13 @@ export default function LMSPortal({ profile }) {
                       <p className="text-xs text-gray-300">{new Date(file.created_at).toLocaleDateString('en-IN')}</p>
                     </div>
                     <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-100">
-                      <a href={`/api/file?id=${file.id}`} target="_blank" rel="noopener noreferrer"
+                      <a href={supabase.storage.from('lms-files').getPublicUrl(file.file_path).data.publicUrl} target="_blank" rel="noopener noreferrer"
                         className="flex items-center space-x-1.5 text-[#272A6F] text-xs font-bold hover:text-[#EFBE33] transition-colors">
                         <Download size={14} />
                         <span>Download</span>
                       </a>
                       {isFaculty && (
-                        <button onClick={() => deleteFile(file.id)}
+                        <button onClick={() => deleteFile(file)}
                           className="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-600 transition-all">
                           <Trash2 size={14} />
                         </button>
@@ -344,13 +371,13 @@ export default function LMSPortal({ profile }) {
               {resultFiles.map(f => {
                 const isMaster = f.name.includes('Master')
                 return (
-                  <a key={f.id || f.name} href={getResultFileURL(f.name)} target="_blank" rel="noopener noreferrer"
+                  <a key={f.id || f.file_name} href={getResultFileURL(f.file_name)} target="_blank" rel="noopener noreferrer"
                     className={`glass rounded-2xl p-5 flex items-center space-x-4 group hover:shadow-xl transition-all hover:-translate-y-1 cursor-pointer ${isMaster ? 'border-l-4 border-[#272A6F]' : 'border-l-4 border-emerald-400'}`}>
                     <div className={`w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 ${isMaster ? 'bg-[#272A6F]/10' : 'bg-emerald-50'}`}>
                       <BarChart2 size={22} className={isMaster ? 'text-[#272A6F]' : 'text-emerald-600'} />
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="font-bold text-[#272A6F] text-sm truncate">{f.name}</p>
+                      <p className="font-bold text-[#272A6F] text-sm truncate">{f.title || f.file_name}</p>
                       <p className="text-xs text-gray-400 mt-0.5">{isMaster ? 'Master Class Report' : 'Subject Report'} · CSV</p>
                     </div>
                     <Download size={16} className="text-gray-300 group-hover:text-[#272A6F] transition-colors flex-shrink-0" />
