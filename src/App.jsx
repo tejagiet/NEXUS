@@ -122,6 +122,7 @@ export default function App() {
   const [needsMFA, setNeedsMFA] = useState(false)
   const [prefill, setPrefill] = useState(null) // { subjectId }
   const [notification, setNotification] = useState({ message: '', type: 'info', visible: false })
+  const [tidbProfile, setTidbProfile] = useState(null)
 
   const showToast = (message, type = 'info') => {
     setNotification({ message, type, visible: true })
@@ -152,6 +153,14 @@ export default function App() {
           setActiveTab(initial)
         }
       })
+
+    // 🏎️ TiDB Parallel Sync (Sidebar)
+    fetch(`/api/profile?id=${session.user.id}`)
+      .then(res => res.json())
+      .then(data => {
+        if (!data.error) setTidbProfile(data)
+      })
+      .catch(err => console.error("TiDB Sync Error:", err))
   }, [session])
 
   useEffect(() => {
@@ -227,14 +236,28 @@ export default function App() {
         {/* Profile */}
         <div className="p-4 border-t border-white/10 space-y-3">
           <div className="flex items-center space-x-3 px-2">
-            <div className="w-9 h-9 rounded-full bg-white/20 flex items-center justify-center flex-shrink-0">
-              <User size={16} />
+            <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center flex-shrink-0 overflow-hidden border-2 border-white/10 shadow-inner group">
+              {tidbProfile ? (
+                 <img 
+                    src={`/api/image?id=${tidbProfile.id}&t=${Date.now()}`} 
+                    alt="TiDB Profile" 
+                    className="w-full h-full object-cover group-hover:scale-110 transition-transform"
+                    onError={(e) => { e.target.onerror = null; e.target.src = ''; }} // fallback to icon if image fails
+                 />
+              ) : (
+                <User size={18} className="text-white/40" />
+              )}
             </div>
             <div className="min-w-0">
-              <p className="text-sm font-bold truncate">{profile?.full_name || session.user.email}</p>
-              <p className="text-[11px] text-[#EFBE33] capitalize font-medium">
-                {(profile?.roles || [profile?.role]).filter(Boolean)[0]?.replace('_', ' ') || 'Student'}
+              <p className="text-sm font-bold truncate leading-tight">
+                 {tidbProfile?.full_name || profile?.full_name || session.user.email}
               </p>
+              <p className="text-[10px] text-[#EFBE33] font-black uppercase tracking-widest mt-0.5">
+                 {tidbProfile?.role || (profile?.roles || [profile?.role]).filter(Boolean)[0] || 'Student'}
+              </p>
+              {tidbProfile?.pin_number && (
+                 <p className="text-[9px] text-white/30 font-mono mt-0.5">{tidbProfile.pin_number}</p>
+              )}
             </div>
           </div>
           <button

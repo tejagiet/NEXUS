@@ -8,6 +8,8 @@ export default function FacultyRegister({ profile, prefill, onPrefillClear }) {
   const [selectedSubject, setSelectedSubject] = useState('')
   const [selectedBranch,  setSelectedBranch]  = useState(profile?.branch || 'CME')
   const [selectedSection, setSelectedSection] = useState('A')
+  const [selectedDate,    setSelectedDate]    = useState(new Date().toISOString().split('T')[0])
+  const [selectedSemester, setSelectedSemester] = useState('Sem 1')
   const [attendanceData,  setAttendanceData]  = useState({})
   const [loading,         setLoading]         = useState(false)
   const [fetching,        setFetching]        = useState(true)
@@ -100,15 +102,16 @@ export default function FacultyRegister({ profile, prefill, onPrefillClear }) {
     const updates = Object.entries(attendanceData).map(([studentId, status]) => ({
       student_id: studentId,
       subject_id: selectedSubject,
+      semester: selectedSemester,
       status,
       marked_by: profile.id,
-      date: new Date().toISOString().split('T')[0],
+      date: selectedDate,
       topic: topic.trim()
     }))
 
     const { error } = await supabase
       .from('attendance')
-      .upsert(updates, { onConflict: 'student_id,subject_id,date' })
+      .upsert(updates, { onConflict: 'student_id,subject_id,date,semester' })
 
     if (error) {
       console.error("Attendance Sync Final Catch:", error)
@@ -140,6 +143,15 @@ export default function FacultyRegister({ profile, prefill, onPrefillClear }) {
       setTopic('')
     }
     setLoading(false)
+  }
+
+  const isPolytechnic = (branch) => ['CME', 'ECE', 'EEE', 'ME', 'CIVIL'].includes(branch) // Assume core branches have poly wings
+  
+  const getAvailableSemesters = (branch) => {
+    if (isPolytechnic(branch)) {
+      return ['Sem 1', 'Sem 3', 'Sem 4', 'Sem 5', 'Sem 6']
+    }
+    return ['Sem 1', 'Sem 2', 'Sem 3', 'Sem 4', 'Sem 5', 'Sem 6', 'Sem 7', 'Sem 8']
   }
 
   if (fetching) return (
@@ -231,6 +243,12 @@ export default function FacultyRegister({ profile, prefill, onPrefillClear }) {
               className="bg-white border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#272A6F] font-bold">
               {['A', 'B', 'C', 'D'].map(s => <option key={s} value={s}>Sec {s}</option>)}
             </select>
+            <select value={selectedSemester} onChange={e => setSelectedSemester(e.target.value)}
+              className="bg-white border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#272A6F] font-bold">
+              {getAvailableSemesters(selectedBranch).map(sem => <option key={sem} value={sem}>{sem}</option>)}
+            </select>
+            <input type="date" value={selectedDate} onChange={e => setSelectedDate(e.target.value)}
+              className="bg-white border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#272A6F] font-bold" />
           </div>
         </div>
 
@@ -247,11 +265,11 @@ export default function FacultyRegister({ profile, prefill, onPrefillClear }) {
             </thead>
             <tbody className="divide-y divide-gray-100">
               {(() => {
-                const filtered = students.filter(s => s.branch === selectedBranch && s.section === selectedSection)
+                const filtered = students.filter(s => s.branch === selectedBranch && s.section === selectedSection && (s.semester === selectedSemester || !s.semester))
                 if (filtered.length === 0) return (
                   <tr>
                     <td colSpan="4" className="p-12 text-center text-gray-400 italic">
-                      No students found in {selectedBranch} Section {selectedSection}.
+                      No {selectedSemester} students found in {selectedBranch} Section {selectedSection}.
                     </td>
                   </tr>
                 )

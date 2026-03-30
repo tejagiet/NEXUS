@@ -171,11 +171,27 @@ function ProfileEditor({ profile, isStandalone = false }) {
       }
 
       const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(fileName)
-      setFormData(prev => ({ ...prev, avatar_url: publicUrl }))
-      
+    
+      // 🏦 TiDB Cloud Mirroring
+      try {
+        const reader = new FileReader()
+        reader.onloadend = async () => {
+          const base64Data = reader.result.split(',')[1]
+          await fetch('/api/upload-profile', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: selected.id, avatar_base64: base64Data })
+          })
+        }
+        reader.readAsDataURL(file)
+      } catch (tidbErr) {
+        console.error("TiDB Mirroring Failed:", tidbErr)
+      }
+
       // Auto-save the URL to profile
       const { error: profileError } = await supabase.from('profiles').update({ avatar_url: publicUrl }).eq('id', selected.id)
       if (profileError) throw profileError
+      setFormData(prev => ({ ...prev, avatar_url: publicUrl }))
 
     } catch (err) {
       console.error("Institutional Asset Error:", err)
@@ -201,6 +217,17 @@ function ProfileEditor({ profile, isStandalone = false }) {
     }
 
     const { error } = await supabase.from('profiles').update(updateData).eq('id', selected.id)
+
+    // 🏎️ TiDB Parallel Sync
+    try {
+       await fetch('/api/profile', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: selected.id, ...updateData })
+       })
+    } catch (tidbErr) {
+       console.error("TiDB Metadata Sync Failed:", tidbErr)
+    }
 
     if (error) showToast("Update failed: " + error.message, "error")
     else {
